@@ -40,7 +40,7 @@ public class Commands {
 
     // 同步默认超时
     public static CommandResult execSync(String command) {
-        return execSync(command, 300_000, false);
+        return execSync(command, 120 * 1000, false);
     }
 
     // 同步自定义超时

@@ -3,11 +3,14 @@ package org.jc.agents;
 import com.openai.models.chat.completions.*;
 import org.jc.Commons;
 import org.jc.Tools;
+import org.jc.todo.TodoManager;
 
 import java.util.*;
 import java.util.function.Function;
 
-public class S02ToolUse {
+public class S03TodoWrite {
+    private static final TodoManager TODO = new TodoManager();
+
     private static final Map<String, Function<String, String>> TOOL_HANDLERS = new HashMap<>();
 
     static {
@@ -15,17 +18,24 @@ public class S02ToolUse {
         TOOL_HANDLERS.put("readFile", Tools::runReadFile);
         TOOL_HANDLERS.put("writeFile", Tools::runWriteFile);
         TOOL_HANDLERS.put("editFile", Tools::runEditFile);
+        TOOL_HANDLERS.put("todo", TODO::update);
     }
 
-    private static final List<ChatCompletionTool> tools = List.of(Tools.bashTool(), Tools.readFileTool(), Tools.writeFileTool(), Tools.editFileTool());
+    private static final List<ChatCompletionTool> tools = List.of(
+            Tools.bashTool()
+            , Tools.readFileTool()
+            , Tools.writeFileTool()
+            , Tools.editFileTool()
+            , Tools.todoTool()
+    );
+
 
     /**
      * 测试输入：
      * <p>
-     * 读取 `pom.xml` 文件
-     * 创建名为 `greet.java` 的文件，文件中包含 `greet(name)` 方法
-     * 编辑 `greet.java`，为该方法添加文档字符串
-     * 读取 `greet.java`，验证修改是否生效
+     * 重构 `hello.java` 文件：添加类型注解、文档字符串，并补充程序入口守卫判断
+     * 创建一个 java 包，包含 `utils.java` 以及测试文件 `tests/test_utils.java`
+     * 检查所有 java 代码文件，并修复所有代码风格问题
      *
      * @param args
      */
@@ -63,9 +73,10 @@ public class S02ToolUse {
     }
 
 
-    private static final String SYSTEM = "你是工作目录 " + Commons.CWD + " 下的编程智能体，使用工具完成任务，直接执行、无需解释";
+    private static final String SYSTEM = "你是工作目录 " + Commons.CWD + " 下的编程智能体，使用待办工具规划多步骤任务。开始前标记为进行中，完成后标记为已完成，优先使用工具操作，而非文字说明";
 
     public static void agentLoop(List<ChatCompletionMessageParam> messages) {
+        int roundsSinceTodo = 0;
         while (true) {
             List<ChatCompletionMessageParam> fullMessages = new ArrayList<>();
             fullMessages.add(ChatCompletionMessageParam.ofSystem(
@@ -75,7 +86,6 @@ public class S02ToolUse {
                             .build()
             ));
             fullMessages.addAll(messages);
-
 
             ChatCompletionCreateParams params = ChatCompletionCreateParams.builder()
                     .model("qwen3.5-plus")
@@ -95,6 +105,7 @@ public class S02ToolUse {
                 return;
             }
 
+            boolean usedTodo = false;
             List<ChatCompletionMessageToolCall> toolCalls = toolCallsOptional.get();
             // 遍历所有工具调用（模型可能一次调用多个工具）
             for (ChatCompletionMessageToolCall toolCall : toolCalls) {
@@ -103,6 +114,20 @@ public class S02ToolUse {
                     // 将工具执行结果以 "tool" 角色发回给模型
                     messages.add(toolMessage);
                 }
+                if (Tools.isTodoTool(toolCall)) {
+                    usedTodo = true;
+                }
+            }
+            if (usedTodo) {
+                roundsSinceTodo = 0;
+            } else {
+                roundsSinceTodo++;
+            }
+            if (roundsSinceTodo >= 3) {
+                messages.add(ChatCompletionMessageParam
+                        .ofUser(ChatCompletionUserMessageParam.builder()
+                                .content("<reminder>更新你的待办事项</reminder>")
+                                .build()));
             }
         }
     }

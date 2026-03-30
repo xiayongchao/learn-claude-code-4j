@@ -14,6 +14,8 @@ public class S01AgentLoop {
         TOOL_HANDLERS.put("bash", Tools::runBash);
     }
 
+    private static final List<ChatCompletionTool> tools = List.of(Tools.bashTool());
+
     /**
      * 测试输入：
      * <p>
@@ -74,7 +76,7 @@ public class S01AgentLoop {
             ChatCompletionCreateParams params = ChatCompletionCreateParams.builder()
                     .model("qwen3.5-plus")
                     .messages(fullMessages)
-                    .tools(List.of(Tools.bashTool()))
+                    .tools(tools)
                     .build();
 
             ChatCompletion chatCompletion = Commons.getClient().chat().completions().create(params);

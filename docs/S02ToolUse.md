@@ -54,7 +54,18 @@ static {
 }
 ```
 
-### 2. agentLoop 方法（与 s01 完全一致）
+### 2. 工具列表定义
+
+```java
+private static final List<ChatCompletionTool> tools = List.of(
+    Tools.bashTool(),
+    Tools.readFileTool(),
+    Tools.writeFileTool(),
+    Tools.editFileTool()
+);
+```
+
+### 3. agentLoop 方法（与 s01 完全一致）
 
 ```java
 private static final String SYSTEM = "你是工作目录 " + Commons.CWD + " 下的编程智能体，使用工具完成任务，直接执行、无需解释";
@@ -72,12 +83,7 @@ public static void agentLoop(List<ChatCompletionMessageParam> messages) {
         ChatCompletionCreateParams params = ChatCompletionCreateParams.builder()
                 .model("qwen3.5-plus")
                 .messages(fullMessages)
-                .tools(List.of(
-                        Tools.bashTool(),
-                        Tools.readFileTool(),
-                        Tools.writeFileTool(),
-                        Tools.editFileTool()
-                ))
+                .tools(tools)
                 .build();
 
         ChatCompletion chatCompletion = Commons.getClient().chat().completions().create(params);
@@ -102,7 +108,7 @@ public static void agentLoop(List<ChatCompletionMessageParam> messages) {
 
 **循环体与 s01 完全一致！只是 TOOLS 列表变长了。**
 
-### 3. 路径安全：isSafePath 沙箱
+### 4. 路径安全：isSafePath 沙箱
 
 ```java
 public static boolean isSafePath(String workDirPath, String path) {
@@ -115,7 +121,7 @@ public static boolean isSafePath(String workDirPath, String path) {
 
 防止 `../` 路径穿越，确保操作限制在工作目录内。
 
-### 4. 工具实现
+### 5. 工具实现
 
 ```java
 // 读取文件
@@ -192,7 +198,7 @@ public static String runEditFile(String arguments) {
 }
 ```
 
-### 5. 工具定义示例
+### 6. 工具定义示例
 
 ```java
 public static ChatCompletionTool readFileTool() {
