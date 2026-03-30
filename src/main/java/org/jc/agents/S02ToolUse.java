@@ -7,20 +7,23 @@ import org.jc.Tools;
 import java.util.*;
 import java.util.function.Function;
 
-public class S01AgentLoop {
+public class S02ToolUse {
     private static final Map<String, Function<String, String>> TOOL_HANDLERS = new HashMap<>();
 
     static {
         TOOL_HANDLERS.put("bash", Tools::runBash);
+        TOOL_HANDLERS.put("readFile", Tools::runReadFile);
+        TOOL_HANDLERS.put("writeFile", Tools::runWriteFile);
+        TOOL_HANDLERS.put("editFile", Tools::runEditFile);
     }
 
     /**
      * 测试输入：
      * <p>
-     * 创建名为 hello.java 的文件，使其输出打印 "Hello, World!"
-     * 列出当前目录下所有 java 文件
-     * 当前 Git 分支是什么？
-     * 创建名为 test_output 的文件夹，并在其中新建 3 个文件
+     * 读取 `pom.xml` 文件
+     * 创建名为 `greet.java` 的文件，文件中包含 `greet(name)` 方法
+     * 编辑 `greet.java`，为该方法添加文档字符串
+     * 读取 `greet.java`，验证修改是否生效
      *
      * @param args
      */
@@ -58,7 +61,7 @@ public class S01AgentLoop {
     }
 
 
-    private static final String SYSTEM = "你当前工作目录为 " + Commons.CWD + "，作为编程智能体，使用 Bash 完成任务，直接执行、无需解释";
+    private static final String SYSTEM = "你是工作目录 " + Commons.CWD + " 下的编程智能体，使用工具完成任务，直接执行、无需解释";
 
     public static void agentLoop(List<ChatCompletionMessageParam> messages) {
         while (true) {
@@ -96,9 +99,8 @@ public class S01AgentLoop {
                 if (toolMessage != null) {
                     // 将工具执行结果以 "tool" 角色发回给模型
                     messages.add(toolMessage);
+                }
+            }
+        }
     }
-}
-
-    }
-}
 }

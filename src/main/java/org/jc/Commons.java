@@ -1,34 +1,16 @@
 package org.jc;
 
-// 该代码 OpenAI SDK 版本为 2.6.0
 
-import com.alibaba.fastjson.JSON;
 import com.openai.client.OpenAIClient;
 import com.openai.client.okhttp.OpenAIOkHttpClient;
-import com.openai.core.JsonValue;
-import com.openai.models.FunctionDefinition;
-import com.openai.models.FunctionParameters;
 import com.openai.models.chat.completions.*;
-
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Optional;
 
 public class Commons {
-    public static void main(String[] args) {
-
-
-    }
-
-    public static String getCwd() {
-        Path currentPath = Paths.get("");
-        return currentPath.toAbsolutePath().toString();
-    }
-
+    public static final String CWD = Paths.get("").toAbsolutePath().toString();
 
     private static final OpenAIClient openAIClient = OpenAIOkHttpClient.builder()
             .apiKey(System.getenv("DASHSCOPE_API_KEY"))
@@ -38,50 +20,6 @@ public class Commons {
     public static OpenAIClient getClient() {
         return openAIClient;
 
-    }
-
-    public static String runBash(String arguments) {
-        String command = JSON.parseObject(arguments).getString("command");
-        Commands.CommandResult commandResult = Commands.execSync(command);
-        return JSON.toJSONString(commandResult);
-    }
-
-    public static ChatCompletionTool bashTool() {
-        // 第一步：创建空的 Map
-        Map<String, JsonValue> paramMap = new HashMap<>();
-
-        // 第二步：放入 JSON Schema 的每一个 key-value
-        paramMap.put("type", JsonValue.from("object"));
-
-        // properties
-        Map<String, JsonValue> commandProp = new HashMap<>();
-        commandProp.put("type", JsonValue.from("string"));
-        commandProp.put("description", JsonValue.from("要执行的shell命令，如 ls -l、pwd"));
-
-        Map<String, JsonValue> properties = new HashMap<>();
-        properties.put("command", JsonValue.from(commandProp));
-
-        paramMap.put("properties", JsonValue.from(properties));
-
-        // required
-        paramMap.put("required", JsonValue.from(List.of("command")));
-
-        // 第三步：构建 FunctionParameters（这行绝对不报错！）
-        FunctionParameters parameters = FunctionParameters.builder()
-                .putAllAdditionalProperties(paramMap)  // ✅ 入参完全匹配
-                .build();
-
-        // 最终函数
-        FunctionDefinition functionDefinition = FunctionDefinition.builder()
-                .name("bash")
-                .description("在当前工作区中运行 shell 命令")
-                .parameters(parameters)
-                .build();
-
-        return ChatCompletionTool.ofFunction(ChatCompletionFunctionTool
-                .builder()
-                .function(functionDefinition)
-                .build());
     }
 
     public static String getText(ChatCompletionMessageParam param) {
@@ -166,5 +104,22 @@ public class Commons {
 
         Optional<String> content = optional.get().content();
         return content.orElse(null);
+    }
+
+    /**
+     * 安全路径校验（防止路径穿越）
+     *
+     * @param workDirPath 工作目录（字符串路径，动态传入）
+     * @param path        子路径
+     * @return 是否安全的
+     */
+    public static boolean isSafePath(String workDirPath, String path) {
+        Path workDir = Paths.get(workDirPath).normalize();
+        Path targetPath = workDir.resolve(path).normalize();
+
+        if (!targetPath.startsWith(workDir)) {
+            return false;
+        }
+        return true;
     }
 }

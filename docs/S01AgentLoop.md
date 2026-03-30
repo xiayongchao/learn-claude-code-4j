@@ -2,7 +2,7 @@
 
 ## 核心理念
 
-**"模型即 Agent，代码即 Harness（马具）"**
+**"模型即 Agent，代码即 Harness"**
 
 - 源码：https://github.com/xiayongchao/learn-claude-code-4j/blob/main/src/main/java/org/jc/agents/S01AgentLoop.java
 - 原版：https://github.com/shareAI-lab/learn-claude-code
@@ -63,14 +63,21 @@ public static void main(String[] args) {
 ### 2. 核心：agentLoop 方法
 
 ```java
+// 工具处理器注册
+private static final Map<String, Function<String, String>> TOOL_HANDLERS = new HashMap<>();
+static {
+    TOOL_HANDLERS.put("bash", Tools::runBash);
+}
+
+private static final String SYSTEM = "你当前工作目录为 " + Commons.CWD + "，作为编程智能体，使用 Bash 完成任务，直接执行、无需解释";
+
 public static void agentLoop(List<ChatCompletionMessageParam> messages) {
     while (true) {
         // 1. 构建完整消息列表（系统提示 + 历史消息）
         List<ChatCompletionMessageParam> fullMessages = new ArrayList<>();
         fullMessages.add(ChatCompletionMessageParam.ofSystem(
             ChatCompletionSystemMessageParam.builder()
-                .content("你当前工作目录为 " + Commons.getCwd() + 
-                         "，作为代码执行代理，使用 Bash 完成任务")
+                .content(SYSTEM)
                 .build()
         ));
         fullMessages.addAll(messages);
@@ -79,7 +86,7 @@ public static void agentLoop(List<ChatCompletionMessageParam> messages) {
         ChatCompletionCreateParams params = ChatCompletionCreateParams.builder()
                 .model("qwen3.5-plus")
                 .messages(fullMessages)
-                .tools(List.of(Commons.bashTool()))
+                .tools(List.of(Tools.bashTool()))
                 .build();
         
         ChatCompletion chatCompletion = Commons.getClient()
@@ -97,7 +104,7 @@ public static void agentLoop(List<ChatCompletionMessageParam> messages) {
         
         // 5. 执行工具调用
         for (ChatCompletionMessageToolCall toolCall : toolCallsOptional.get()) {
-            ChatCompletionMessageParam toolMessage = Tools.exe(toolCall);
+            ChatCompletionMessageParam toolMessage = Tools.exe(TOOL_HANDLERS, toolCall);
             if (toolMessage != null) {
                 messages.add(toolMessage);  // 将工具结果发回给模型
             }
@@ -106,19 +113,34 @@ public static void agentLoop(List<ChatCompletionMessageParam> messages) {
 }
 ```
 
-### 3. 工具注册：Tools 类
+### 3. 工具执行：Tools.exe 方法
 
 ```java
-public class Tools {
-    private static final Map<String, Function<String, String>> TOOL_HANDLERS = new HashMap<>();
-    
-    static {
-        TOOL_HANDLERS.put("bash", Commons::runBash);
+public static ChatCompletionMessageParam exe(
+        Map<String, Function<String, String>> TOOL_HANDLERS, 
+        ChatCompletionMessageToolCall toolCall) {
+    if (toolCall == null || !toolCall.isFunction()) {
+        return null;
     }
     
-    public static ChatCompletionMessageParam exe(ChatCompletionMessageToolCall toolCall) {
-        // ... 执行工具并返回结果
+    ChatCompletionMessageFunctionToolCall functionCall = toolCall.asFunction();
+    String functionName = functionCall.function().name();
+    String arguments = functionCall.function().arguments();
+    
+    Function<String, String> toolHandler = TOOL_HANDLERS.get(functionName);
+    if (toolHandler == null) {
+        return ChatCompletionMessageParam.ofTool(ChatCompletionToolMessageParam
+                .builder()
+                .content(String.format("未知的工具：%s", functionName))
+                .toolCallId(functionCall.id())
+                .build());
     }
+    
+    return ChatCompletionMessageParam.ofTool(ChatCompletionToolMessageParam
+            .builder()
+            .content(toolHandler.apply(arguments))
+            .toolCallId(functionCall.id())
+            .build());
 }
 ```
 
@@ -158,7 +180,8 @@ public static ChatCompletionTool bashTool() {
 | 消息类型 | `{"role": "user", ...}` | `ChatCompletionMessageParam.ofUser()` |
 | 工具定义 | `{"name": "bash", ...}` | `ChatCompletionTool` + `FunctionDefinition` |
 | 停止判断 | `response.stop_reason != "tool_use"` | `message.toolCalls().isEmpty()` |
-| 工具执行 | `run_bash(command)` | `Commons.runBash(args)` |
+| 工具执行 | `TOOL_HANDLERS[name](args)` | `Tools.exe(TOOL_HANDLERS, toolCall)` |
+| 工具注册 | `{"bash": run_bash}` | `TOOL_HANDLERS.put("bash", Tools::runBash)` |
 
 ## 项目依赖
 
