@@ -4,6 +4,9 @@
 
 **"模型即 Agent，代码即 Harness（马具）"**
 
+- 源码：https://github.com/xiayongchao/learn-claude-code-4j/blob/main/src/main/java/org/jc/agents/S01AgentLoop.java
+- 原版：https://github.com/shareAI-lab/learn-claude-code
+
 这个项目源自 [shareAI-lab/learn-claude-code](https://github.com/shareAI-lab/learn-claude-code)，旨在帮助 Java 程序员理解 AI Agent 的核心机制。不同于 Python 原版，本文用 Java 实现相同的 Agent Loop，让习惯 Java 的开发者也能深入学习。
 
 ## 问题背景
