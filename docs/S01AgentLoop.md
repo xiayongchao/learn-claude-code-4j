@@ -172,6 +172,26 @@ public static ChatCompletionTool bashTool() {
 }
 ```
 
+### 5. 危险命令防护
+
+Agent 执行 shell 命令存在安全风险，需要拦截危险操作：
+
+```java
+private static final Set<String> dangerous = new HashSet<>(List.of("rm -rf /", "sudo", "shutdown", "reboot"));
+
+public static String runBash(String arguments) {
+    if (dangerous.contains(arguments)) {
+        return "错误：危险命令被阻止";
+    }
+    // ... 执行命令
+}
+```
+
+**防护策略：**
+- 黑名单拦截：`rm -rf /`、`sudo`、`shutdown`、`reboot` 等危险命令直接拒绝
+- 路径沙箱：限制操作在指定工作目录内（s02 详解）
+- 超时控制：防止命令永久阻塞
+
 ## Python vs Java 对比
 
 | 组件 | Python | Java |
