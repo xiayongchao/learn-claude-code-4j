@@ -9,8 +9,16 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class ToolHandlers {
+
     public interface ToolCall {
+    }
+
+    public interface LeadToolCall extends ToolCall {
         String call(Agent agent, String arguments);
+    }
+
+    public interface TeammateToolCall extends ToolCall {
+        String call(TeammateAgent agent, String arguments);
     }
 
     private final Map<String, ToolCall> toolCalls = new HashMap<>();
@@ -27,7 +35,7 @@ public class ToolHandlers {
         return this;
     }
 
-    public ChatCompletionMessageParam call(Agent agent, ChatCompletionMessageToolCall toolCall) {
+    public ChatCompletionMessageParam call(Object agent, ChatCompletionMessageToolCall toolCall) {
         if (agent == null || toolCall == null || !toolCall.isFunction()) {
             return null;
         }
@@ -45,10 +53,24 @@ public class ToolHandlers {
                     .toolCallId(functionCall.id()) // 必须对应 toolCall 的 ID
                     .build());
         }
+
+        String content;
+        if (call instanceof LeadToolCall && agent instanceof Agent) {
+            content = ((LeadToolCall) call).call((Agent) agent, arguments);
+        } else if (call instanceof TeammateToolCall && agent instanceof TeammateAgent) {
+            content = ((TeammateToolCall) call).call((TeammateAgent) agent, arguments);
+        } else {
+            return ChatCompletionMessageParam.ofTool(ChatCompletionToolMessageParam
+                    .builder()
+                    .content(String.format("错误的工具：%s", functionName))
+                    .toolCallId(functionCall.id()) // 必须对应 toolCall 的 ID
+                    .build());
+        }
+
         // 将工具执行结果以 "tool" 角色发回给模型
         return ChatCompletionMessageParam.ofTool(ChatCompletionToolMessageParam
                 .builder()
-                .content(call.call(agent, arguments))
+                .content(content)
                 .toolCallId(functionCall.id()) // 必须对应 toolCall 的 ID
                 .build());
     }

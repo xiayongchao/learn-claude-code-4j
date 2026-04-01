@@ -1,2 +1,1 @@
-{"content":"你好 Bob，我是 Alice。我刚刚完成了一个新功能的开发，请你帮忙测试一下。如果有任何问题，请随时告诉我。","from":"lead","timestamp":1.775017045469E9,"type":"message"}
-{"content":"状态更新：第一阶段已完成","from":"lead","timestamp":1.775017070435E9,"type":"broadcast"}
+{"content":"你好 bob，我是 alice。我已经完成了新功能的开发，请你帮忙测试一下。如果有任何问题，请随时告诉我。","from":"lead","timestamp":1.775039168517E9,"type":"message"}

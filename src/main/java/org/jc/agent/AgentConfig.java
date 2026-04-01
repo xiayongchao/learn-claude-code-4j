@@ -3,6 +3,7 @@ package org.jc.agent;
 public class AgentConfig {
     private boolean readInbox;
     private String workDir;
+    private Object trackerLock;
 
     private AgentConfig() {
 
@@ -12,22 +13,27 @@ public class AgentConfig {
         return new AgentConfig();
     }
 
-    public AgentConfig readInbox(boolean readInbox) {
+    public boolean isReadInbox() {
+        return readInbox;
+    }
+
+    public void setReadInbox(boolean readInbox) {
         this.readInbox = readInbox;
-        return this;
     }
 
-    public AgentConfig workDir(String workDir) {
+    public String getWorkDir() {
+        return workDir;
+    }
+
+    public void setWorkDir(String workDir) {
         this.workDir = workDir;
-        return this;
     }
 
-
-    public boolean readInbox() {
-        return this.readInbox;
+    public Object getTrackerLock() {
+        return trackerLock;
     }
 
-    public String workDir() {
-        return this.workDir;
+    public void setTrackerLock(Object trackerLock) {
+        this.trackerLock = trackerLock;
     }
 }

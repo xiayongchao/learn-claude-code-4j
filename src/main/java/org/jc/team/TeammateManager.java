@@ -65,8 +65,8 @@ public class TeammateManager {
     // ===================== 创建/启动队友 =====================
 
     public String spawn(TeammateAgent agent, String prompt) {
-        String name = agent.name();
-        String role = agent.role();
+        String name = agent.getName();
+        String role = agent.getRole();
         Teammate teammate = findTeammate(name);
         if (teammate != null) {
             String status = teammate.getStatus();

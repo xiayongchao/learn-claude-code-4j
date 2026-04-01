@@ -111,7 +111,7 @@ public class Tools {
 
     /// ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    public static ChatCompletionTool shutdownResponseTool() {
+    public static ChatCompletionTool teammateShutdownResponseTool() {
         return ChatCompletionTool.ofFunction(ChatCompletionFunctionTool.builder()
                 .function(FunctionDefinition.builder()
                         .name("shutdownResponse")
@@ -126,7 +126,7 @@ public class Tools {
                                                 )),
                                                 "approve", JsonValue.from(Map.of(
                                                         "type", JsonValue.from("boolean"),
-                                                        "description", JsonValue.from("是否批准停机")
+                                                        "description", JsonValue.from("是否批准停止")
                                                 )),
                                                 "reason", JsonValue.from(Map.of(
                                                         "type", JsonValue.from("string"),
@@ -165,7 +165,7 @@ public class Tools {
                 .build());
     }
 
-    public static ChatCompletionTool leadShutdownRequestTool() {
+    public static ChatCompletionTool shutdownRequestTool() {
         return ChatCompletionTool.ofFunction(ChatCompletionFunctionTool.builder()
                 .function(FunctionDefinition.builder()
                         .name("shutdownRequest")
@@ -211,10 +211,10 @@ public class Tools {
                 .build());
     }
 
-    public static ChatCompletionTool leadPlanApprovalTool() {
+    public static ChatCompletionTool planReviewTool() {
         return ChatCompletionTool.ofFunction(ChatCompletionFunctionTool.builder()
                 .function(FunctionDefinition.builder()
-                        .name("planApproval")
+                        .name("planReview")
                         .description("批准或拒绝队友的计划。需提供 request_id、approve 以及可选的反馈信息。")
                         .parameters(FunctionParameters.builder()
                                 .putAllAdditionalProperties(Map.of(
