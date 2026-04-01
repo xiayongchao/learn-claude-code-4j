@@ -7,10 +7,17 @@ import com.openai.models.chat.completions.*;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.Optional;
 
 public class Commons {
     public static final String CWD = Paths.get("").toAbsolutePath().toString();
+    public static final String SKILLS_DIR = Commons.CWD + "/src/main/resources/skills";
+
+    public static final String TRANSCRIPT_DIR = Commons.CWD + "/src/main/resources/transcripts";
+    public static final String TASK_DIR = Commons.CWD + "/src/main/resources/tasks";
+    public static final String TEAM_DIR = Commons.CWD + "/src/main/resources/team";
+    public static final String INBOX_DIR = Commons.TEAM_DIR + "/inbox";
 
     private static final OpenAIClient openAIClient = OpenAIOkHttpClient.builder()
             .apiKey(System.getenv("DASHSCOPE_API_KEY"))
@@ -57,7 +64,15 @@ public class Commons {
             return null;
         }
 
-        Optional<ChatCompletionAssistantMessageParam.Content> content = optional.get().content();
+        return getAssistantText(optional.get());
+    }
+
+    public static String getAssistantText(ChatCompletionAssistantMessageParam param) {
+        if (param == null) {
+            return null;
+        }
+
+        Optional<ChatCompletionAssistantMessageParam.Content> content = param.content();
         return content.map(ChatCompletionAssistantMessageParam.Content::asText).orElse(null);
     }
 
@@ -121,5 +136,28 @@ public class Commons {
             return false;
         }
         return true;
+    }
+
+    public static <T> List<T> getLastN(List<T> list, int N) {
+        if (list == null || list.isEmpty() || N <= 0) {
+            return list;
+        }
+        // 数据量不足 N，直接返回全部
+        if (list.size() <= N) {
+            return list;
+        }
+        // 保留最后 N 条
+        return list.subList(list.size() - N, list.size());
+    }
+
+    public static <T> List<T> getFirstN(List<T> list, int N) {
+        if (list == null || list.isEmpty() || N <= 0) {
+            return List.of();
+        }
+        if (list.size() <= N) {
+            return List.of(); // 没有要删的
+        }
+        // 取 0 ~ (总数 - N) 的数据
+        return list.subList(0, list.size() - N);
     }
 }
