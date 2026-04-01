@@ -57,24 +57,43 @@ Agent (基类)
 ├── readInbox()   - 读取收件箱
 ├── chat()        - 调用 LLM
 ├── toolCall()    - 执行工具
-└── loop()        - 主循环
+├── loop()        - 主循环
+└── getLead()     - 获取 Lead Agent（供 Teammate 使用）
 
 ToolHandlers (工具注册器)
-└── add(toolName, handler)
+├── LeadToolCall     - Lead Agent 专用
+└── TeammateToolCall - TeammateAgent 专用
 
 AgentConfig (配置)
 ├── readInbox
-└── workDir
+├── workDir
+└── trackerLock
 
 TeammateAgent (队友 Agent，继承 Agent)
 ```
 
-### 代码对比
+### 关键设计
 
-| 版本 | 写法 |
-|------|------|
-| 旧 | `TOOL_HANDLERS.put("bash", Tools::runBash)` |
-| 新 | `ToolHandlers.of().add("bash", (agent, args) -> ...)` |
+**1. 工具处理器分离**
+
+Lead 和 Teammate 使用不同的接口，避免类型混乱：
+
+```java
+public interface LeadToolCall {
+    String call(Agent agent, String arguments);
+}
+
+public interface TeammateToolCall {
+    String call(TeammateAgent agent, String arguments);
+}
+```
+
+**2. Teammate 通过 getLead() 访问 Lead**
+
+```java
+// 队友发送消息需要通过 Lead
+.add("sendMessage", (agent, args) -> agent.getLead().sendMessage(args))
+```
 
 ## Java 实现详解
 
@@ -90,41 +109,45 @@ TeammateAgent (队友 Agent，继承 Agent)
 ```java
 // 队友工具（不含 spawn，避免递归）
 private static ToolHandlers teammateToolHandlers = ToolHandlers.of()
-    .add("bash", (agent, args) -> Tools.runBash(args))
-    .add("readFile", (agent, args) -> Tools.runReadFile(args))
-    .add("writeFile", (agent, args) -> Tools.runWriteFile(args))
-    .add("editFile", (agent, args) -> Tools.runEditFile(args))
-    .add("sendMessage", Agent::sendMessage)
-    .add("readInbox", Agent::readInbox);
+    .add("bash", (ToolHandlers.TeammateToolCall) (agent, args) -> Tools.runBash(args))
+    .add("readFile", (ToolHandlers.TeammateToolCall) (agent, args) -> Tools.runReadFile(args))
+    .add("writeFile", (ToolHandlers.TeammateToolCall) (agent, args) -> Tools.runWriteFile(args))
+    .add("editFile", (ToolHandlers.TeammateToolCall) (agent, args) -> Tools.runEditFile(args))
+    .add("sendMessage", (ToolHandlers.TeammateToolCall) (agent, args) -> agent.getLead().sendMessage(args))
+    .add("readInbox", (ToolHandlers.TeammateToolCall) (agent, args) -> agent.getLead().readInbox(args));
 
 // Lead 工具（包含团队管理）
 private static ToolHandlers leadToolHandlers = ToolHandlers.of()
-    .add("bash", (agent, args) -> Tools.runBash(args))
-    .add("readFile", (agent, args) -> Tools.runReadFile(args))
-    .add("writeFile", (agent, args) -> Tools.runWriteFile(args))
-    .add("editFile", (agent, args) -> Tools.runEditFile(args))
-    .add("spawnTeammate", (agent, args) -> agent.spawnTeammate(args, teammateTools, teammateToolHandlers))
-    .add("listTeammates", Agent::listTeammate)
-    .add("sendMessage", Agent::sendMessage)
-    .add("readInbox", Agent::readInbox)
-    .add("broadcast", Agent::broadcast);
+    .add("bash", (ToolHandlers.LeadToolCall) (agent, args) -> Tools.runBash(args))
+    .add("readFile", (ToolHandlers.LeadToolCall) (agent, args) -> Tools.runReadFile(args))
+    .add("writeFile", (ToolHandlers.LeadToolCall) (agent, args) -> Tools.runWriteFile(args))
+    .add("editFile", (ToolHandlers.LeadToolCall) (agent, args) -> Tools.runEditFile(args))
+    .add("spawnTeammate", (ToolHandlers.LeadToolCall) (agent, args) -> agent.spawnTeammate(args, teammateTools, teammateToolHandlers))
+    .add("listTeammates", (ToolHandlers.LeadToolCall) Agent::listTeammate)
+    .add("sendMessage", (ToolHandlers.LeadToolCall) Agent::sendMessage)
+    .add("readInbox", (ToolHandlers.LeadToolCall) Agent::readInbox)
+    .add("broadcast", (ToolHandlers.LeadToolCall) Agent::broadcast);
 ```
 
 ### 3. Agent 配置与调用
 
 ```java
-ChatCompletionMessageParam last = Agent.of()
-    .name("lead")
-    .prompt("你是 " + Commons.CWD + " 工作目录下的团队负责人。创建团队成员，并通过收件箱进行通信协作")
-    .model("qwen3.5-plus")
-    .bus(bus)
-    .teammateManager(teammateManager)
-    .tools(leadTools)
-    .toolHandlers(leadToolHandlers)
-    .config(AgentConfig.of()
-        .readInbox(true)
-        .workDir(Commons.CWD))
-    .loop(messages);
+AgentConfig config = AgentConfig.of();
+config.setReadInbox(true);
+config.setWorkDir(Commons.CWD);
+config.setTrackerLock(null);
+
+Agent agent = Agent.of();
+agent.setName(LEAD);
+agent.setModel(QWEN_3_5_PLUS);
+agent.setPrompt("你是 " + Commons.CWD + " 工作目录下的团队负责人。创建团队成员，并通过收件箱进行通信协作");
+agent.setBus(bus);
+agent.setTeammateManager(teammateManager);
+agent.setTools(leadTools);
+agent.setToolHandlers(leadToolHandlers);
+agent.setConfig(config);
+
+ChatCompletionMessageParam last = agent.loop(messages);
 ```
 
 ### 4. MessageBus：消息总线
