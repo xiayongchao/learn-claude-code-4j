@@ -21,6 +21,10 @@ public class Tools {
 
     /// ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    public static String runIdle() {
+        return "进入空闲阶段，将轮询等待新任务";
+    }
+
     public static String runBash(String arguments) {
         if (dangerous.contains(arguments)) {
             return "错误：危险命令被阻止";
@@ -110,6 +114,48 @@ public class Tools {
     }
 
     /// ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    public static ChatCompletionTool claimTaskTool() {
+        return ChatCompletionTool.ofFunction(ChatCompletionFunctionTool.builder()
+                .function(FunctionDefinition.builder()
+                        .name("claimTask")
+                        .description("根据任务ID从任务面板认领任务。")
+                        .parameters(FunctionParameters.builder()
+                                .putAllAdditionalProperties(Map.of(
+                                        "type", JsonValue.from("object"),
+                                        "properties", JsonValue.from(Map.of(
+                                                "task_id", JsonValue.from(Map.of(
+                                                        "type", JsonValue.from("integer"),
+                                                        "description", JsonValue.from("任务ID")
+                                                ))
+                                        )),
+                                        "required", JsonValue.from(List.of("task_id"))
+                                ))
+                                .build()
+                        )
+                        .build()
+                )
+                .build()
+        );
+    }
+
+    public static ChatCompletionTool idleTool() {
+        return ChatCompletionTool.ofFunction(ChatCompletionFunctionTool.builder()
+                .function(FunctionDefinition.builder()
+                        .name("idle")
+                        .description("标识当前已无待处理工作，进入空闲轮询状态")
+                        .parameters(FunctionParameters.builder()
+                                .putAllAdditionalProperties(Map.of(
+                                        "type", JsonValue.from("object"),
+                                        "properties", JsonValue.from(Map.of()),
+                                        "required", JsonValue.from(List.of())
+                                ))
+                                .build()
+                        )
+                        .build()
+                )
+                .build()
+        );
+    }
 
     public static ChatCompletionTool teammateShutdownResponseTool() {
         return ChatCompletionTool.ofFunction(ChatCompletionFunctionTool.builder()
@@ -503,7 +549,7 @@ public class Tools {
                                 .putAllAdditionalProperties(Map.of(
                                         "type", JsonValue.from("object"),
                                         "properties", JsonValue.from(Map.of(
-                                                "task_id", JsonValue.from(Map.of(
+                                                "taskId", JsonValue.from(Map.of(
                                                         "type", JsonValue.from("integer"),
                                                         "description", JsonValue.from("任务ID")
                                                 ))

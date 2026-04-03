@@ -6,15 +6,21 @@ import com.google.common.collect.Maps;
 import com.openai.models.chat.completions.*;
 import org.jc.message.Message;
 import org.jc.message.MessageBus;
+import org.jc.message.ReadResult;
+import org.jc.task.TaskBoard;
+import org.jc.task.TaskClaimResult;
+import org.jc.team.Team;
 import org.jc.team.TeammateManager;
 
 import java.util.*;
 
 public class Agent extends BaseAgent {
     private MessageBus bus;
+    private TaskBoard taskBoard;
     private TeammateManager teammateManager;
     private final Map<String, AgentShutdownRequest> shutdownRequests = new HashMap<>();
     private final Map<String, AgentPlanRequest> planRequests = new HashMap<>();
+    private final Object trackerLock = new Object();
 
     protected Agent() {
     }
@@ -35,8 +41,10 @@ public class Agent extends BaseAgent {
         return teammateManager;
     }
 
-    public void setTeammateManager(TeammateManager teammateManager) {
-        this.teammateManager = teammateManager;
+    @Override
+    public void setTeam(Team team) {
+        super.setTeam(team);
+        this.teammateManager = new TeammateManager(team);
     }
 
     public Map<String, AgentShutdownRequest> getShutdownRequests() {
@@ -47,33 +55,49 @@ public class Agent extends BaseAgent {
         return planRequests;
     }
 
+    public Object getTrackerLock() {
+        return trackerLock;
+    }
+
+    public TaskBoard getTaskBoard() {
+        return taskBoard;
+    }
+
+    public void setTaskBoard(TaskBoard taskBoard) {
+        this.taskBoard = taskBoard;
+    }
+
+    /**
+     * 领取任务
+     */
+    public String claimTask(String arguments, String owner) {
+        Integer taskId = JSON.parseObject(arguments).getInteger("taskId");
+        TaskClaimResult taskClaimResult = this.getTaskBoard().claimTask(taskId, owner);
+        return taskClaimResult.getInfo();
+    }
+
+
     // ===================== 创建/启动队友 =====================
-    public String spawnTeammate(String arguments, List<ChatCompletionTool> tools, ToolHandlers toolHandlers) {
+    public String spawnTeammate(String arguments, List<ChatCompletionTool> tools, ToolHandlers toolHandlers
+            , PromptProvider promptProvider) {
         JSONObject object = JSON.parseObject(arguments);
         String name = object.getString("name");
         String role = object.getString("role");
 
-        AgentConfig config = AgentConfig.of();
-        config.setReadInbox(true);
-        config.setWorkDir(this.getConfig().getWorkDir());
-        config.setTrackerLock(this.getConfig().getTrackerLock());
-
         TeammateAgent teammateAgent = TeammateAgent.of();
         teammateAgent.setName(name);
         teammateAgent.setRole(role);
+        teammateAgent.setPromptProvider(promptProvider);
+        teammateAgent.setTeam(this.getTeam());
         teammateAgent.setModel(this.getModel());
         teammateAgent.setLead(this);
         teammateAgent.setMaxLoopTimes(50);
         teammateAgent.setTools(tools);
         teammateAgent.setToolHandlers(toolHandlers);
-        teammateAgent.setConfig(config);
+        teammateAgent.setConfig(this.getConfig().getTeammateConfig());
         return this.getTeammateManager().spawn(
                 teammateAgent, object.getString("prompt")
         );
-    }
-
-    public String listTeammate() {
-        return this.getTeammateManager().listTeammate();
     }
 
     public String sendMessage(String arguments) {
@@ -92,7 +116,7 @@ public class Agent extends BaseAgent {
         JSONObject object = JSON.parseObject(arguments);
 
         String sender = this.getName();
-        List<String> teammates = teammateManager.listTeammateNames();
+        List<String> teammates = this.getTeam().listTeammateNames();
         int count = 0;
         if (teammates != null) {
             for (String name : teammates) {
@@ -115,7 +139,7 @@ public class Agent extends BaseAgent {
         String teammate = JSON.parseObject(arguments).getString("teammate");
         String requestId = UUID.randomUUID().toString().substring(0, 8);
 
-        synchronized (this.getConfig().getTrackerLock()) {
+        synchronized (this.getTrackerLock()) {
             this.getShutdownRequests().put(requestId, new AgentShutdownRequest(teammate, "pending"));
         }
         HashMap<String, Object> extra = Maps.newHashMap();
@@ -137,7 +161,7 @@ public class Agent extends BaseAgent {
         String feedback = object.getString("feedback");
 
         AgentPlanRequest planRequest;
-        synchronized (this.getConfig().getTrackerLock()) {
+        synchronized (this.getTrackerLock()) {
             planRequest = this.getPlanRequests().get(requestId);
         }
 
@@ -145,7 +169,7 @@ public class Agent extends BaseAgent {
             return String.format("错误：未知的计划请求ID %s", requestId);
         }
 
-        synchronized (this.getConfig().getTrackerLock()) {
+        synchronized (this.getTrackerLock()) {
             planRequest.setStatus(approve ? "approved" : "rejected");
         }
 
@@ -168,7 +192,7 @@ public class Agent extends BaseAgent {
     public String shutdownResponse(String arguments) {
         JSONObject object = JSON.parseObject(arguments);
         String requestId = object.getString("requestId");
-        synchronized (this.getConfig().getTrackerLock()) {
+        synchronized (this.getTrackerLock()) {
             return JSON.toJSONString(shutdownRequests.get(requestId));
         }
     }
@@ -178,26 +202,31 @@ public class Agent extends BaseAgent {
         return JSON.toJSONString(this.getBus().readInbox(arguments, true));
     }
 
-    public void readInbox(List<ChatCompletionMessageParam> messages) {
+    public ReadResult readInbox(List<ChatCompletionMessageParam> messages) {
         if (!this.getConfig().isReadInbox()) {
-            return;
+            return ReadResult.of();
         }
+        int size = 0;
         List<Message> inboxMessages = this.getBus().readInbox(this.getName(), false);
         if (inboxMessages != null && !inboxMessages.isEmpty()) {
-            messages.add(
-                    ChatCompletionMessageParam.ofUser(
-                            ChatCompletionUserMessageParam
-                                    .builder()
-                                    .content(String.format("<inbox>\n%s\n</inbox>", JSON.toJSONString(inboxMessages)))
-                                    .build()
-                    ));
-            messages.add(ChatCompletionMessageParam.ofAssistant(
-                    ChatCompletionAssistantMessageParam
-                            .builder()
-                            .content("已查看收件箱消息")
-                            .build()
-            ));
+            for (Message inboxMessage : inboxMessages) {
+                size++;
+                if (Objects.equals("shutdownRequest", inboxMessage.getType())
+                        && Objects.equals("direct", this.getConfig().getShutdownResponse())) {
+                    return ReadResult.of(size, true);
+                }
+
+                messages.add(
+                        ChatCompletionMessageParam.ofUser(
+                                ChatCompletionUserMessageParam
+                                        .builder()
+                                        .content(String.format("<inbox>\n%s\n</inbox>", JSON.toJSONString(inboxMessage)))
+                                        .build()
+                        ));
+
+            }
         }
+        return ReadResult.of(size);
     }
 
     public ChatCompletionMessageParam loop(List<ChatCompletionMessageParam> messages) {

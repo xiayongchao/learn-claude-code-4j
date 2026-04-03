@@ -34,9 +34,7 @@ public class S05SkillLoading {
      * 测试输入：
      * <p>
      * 有哪些可用技能？
-     * 加载 agent-builder 技能并按照其说明操作
-     * 我需要进行代码审查——先加载相关技能
-     * 使用 mcp-builder 技能构建一个 MCP 服务器
+     * 读取 xxx excel文件内容
      *
      * @param args
      */
@@ -76,7 +74,11 @@ public class S05SkillLoading {
 
     private static final String SYSTEM = "你是工作目录 " + Commons.CWD
             + " 下的编程智能体，遇到陌生业务场景前，请先调用 `load_skill` 加载专属专业知识。可用技能列表："
-            + SKILL_LOADER.getDescriptions();
+            + SKILL_LOADER.getDescriptions()
+            + "\n\n"
+            + "如果需要进一步加载资源或脚本，可以在 " + Commons.SKILLS_DIR + " 目录下进行搜索，" +
+            "禁止自己创建资源或脚本文件";
+
 
     public static void agentLoop(List<ChatCompletionMessageParam> messages) {
         while (true) {

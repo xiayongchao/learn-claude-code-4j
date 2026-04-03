@@ -51,39 +51,50 @@
 
 ```
 src/main/resources/skills/
-├── agent-builder/
-│   ├── SKILL.md        # 技能定义文件
-│   ├── references/     # 参考文档
-│   └── scripts/        # 脚本
-├── mcp-builder/
-│   └── SKILL.md
-├── code-review/
-│   └── SKILL.md
-└── pdf/
-    └── SKILL.md
+└── excel/
+    ├── SKILL.md
+    └── scripts/        # Java 脚本目录（JBang 调用）
+        └── ExcelTool.java
 ```
 
 ### 2. SKILL.md 格式（YAML Front Matter）
 
 ```markdown
 ---
-name: agent-builder
+name: excel
 description: |
-  Design and build AI agents for any domain. Use when users:
-  (1) ask to "create an agent", "build an assistant"
-  (2) want to understand agent architecture
-  (3) need help with capabilities, subagents, planning
-  Keywords: agent, assistant, autonomous, workflow
+    基于Java+JBang实现的Excel自动化操作技能，无需手动安装依赖、无需配置环境、无需打包。
+    支持自动检测并安装JBang运行环境，支持读取Excel、导出Excel、指定Sheet读取、自定义输入输出路径。
+    工具类统一放在 scripts/ 目录下，与SKILL.md同级。
+    适用于脚本调用、自动化任务、批处理、外部系统调用、定时调度等场景。
+Keywords: excel, jbang, 自动安装, 动态依赖, 命令行, 导入, 导出, 脚本
 ---
 
-# Agent Builder
+# Excel 操作技能
 
-Build AI agents for any domain - customer service, research...
+基于 Java + JBang 实现，真正做到"零配置"运行。
 
-## The Core Philosophy
+## JBang 机制
 
-> **The model already knows how to be an agent.**
-> Your job is to get out of the way.
+> **JBang**：Java 脚本运行器，自动下载 JDK + 依赖
+
+特点：
+- 无需手动安装 JDK
+- 自动下载依赖（pom.xml 声明的库）
+- 一行命令执行：`jbang run ExcelTool.java --input data.xlsx --output result.xlsx`
+
+## 使用方式
+
+```bash
+# 自动检测并安装 JBang，执行 Excel 操作
+jbang scripts/ExcelTool.java --input path/to/input.xlsx --output path/to/output.xlsx
+```
+
+## 核心功能
+
+- 读取 Excel（支持指定 Sheet）
+- 导出 Excel
+- 自定义输入输出路径
 ...
 ```
 
@@ -101,40 +112,62 @@ public class SkillLoader {
 
     private void loadAll() {
         var dirPath = Paths.get(skillsDir);
-        List<java.nio.file.Path> files = Files.walk(dirPath)
-                .filter(Files::isRegularFile)
-                .filter(p -> "SKILL.md".equals(p.getFileName().toString()))
-                .toList();
+        if (!Files.exists(dirPath)) {
+            return;  // 目录不存在则跳过
+        }
 
-        for (var file : files) {
-            String text = Files.readString(file);
-            ParseResult result = parseFrontMatter(text);
-            
-            String name = result.getMeta().getOrDefault("name",
-                    file.getParent().getFileName().toString());
-            
-            Skill skill = new Skill();
-            skill.meta = result.getMeta();
-            skill.body = result.getBody();
-            skills.put(name, skill);
+        try {
+            List<java.nio.file.Path> files = Files.walk(dirPath)
+                    .filter(Files::isRegularFile)
+                    .filter(p -> "SKILL.md".equals(p.getFileName().toString()))
+                    .sorted()  // 排序保证顺序一致
+                    .toList();
+
+            for (var file : files) {
+                String text = Files.readString(file);
+                ParseResult result = parseFrontMatter(text);
+
+                String name = result.getMeta().getOrDefault("name",
+                        file.getParent().getFileName().toString());
+
+                Skill skill = new Skill();
+                skill.meta = result.getMeta();
+                skill.body = result.getBody();
+                skill.path = file.toString();  // 记录文件路径
+
+                skills.put(name, skill);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
     public String getContent(String args) {
         String name = JSON.parseObject(args).getString("name");
         if (!skills.containsKey(name)) {
-            return "错误：未知技能 '" + name + "'。可用技能: " + skills.keySet();
+            return "错误：未知技能 '" + name + "'。 可用的技能: " + String.join(", ", skills.keySet());
         }
         Skill skill = skills.get(name);
         return "<skill name=\"" + name + "\">\n" + skill.body + "\n</skill>";
     }
 
     public String getDescriptions() {
+        if (skills.isEmpty()) {
+            return "(无可用技能)";
+        }
+
         List<String> lines = new ArrayList<>();
         for (var entry : skills.entrySet()) {
             String name = entry.getKey();
-            String desc = entry.getValue().meta.getOrDefault("description", "");
-            lines.add("  - " + name + ": " + desc);
+            Skill skill = entry.getValue();
+            String desc = skill.meta.getOrDefault("description", "无描述");
+            String tags = skill.meta.getOrDefault("tags", "");
+
+            String line = "  - " + name + ": " + desc;
+            if (!tags.isBlank()) {
+                line += " [" + tags + "]";  // 支持 Tags 显示
+            }
+            lines.add(line);
         }
         return String.join("\n", lines);
     }
@@ -190,18 +223,21 @@ private static final List<ChatCompletionTool> tools = List.of(
 
 ```java
 private static final String SYSTEM = "你是工作目录 " + Commons.CWD
-        + " 下的编程智能体，遇到陌生业务场景前，请先调用 `load_skill` 加载专属专业知识。"
-        + "可用技能列表：\n"
-        + SKILL_LOADER.getDescriptions();
+        + " 下的编程智能体，遇到陌生业务场景前，请先调用 `load_skill` 加载专属专业知识。可用技能列表："
+        + SKILL_LOADER.getDescriptions()
+        + "\n\n"
+        + "如果需要进一步加载资源或脚本，可以在 " + Commons.SKILLS_DIR + " 目录下进行搜索，"
+        + "禁止自己创建资源或脚本文件";
 ```
 
 生成的 SYSTEM 示例：
 ```
 你是工作目录 /path/to/project 下的编程智能体...
 可用技能列表：
-  - agent-builder: Design and build AI agents...
-  - mcp-builder: Build MCP servers...
-  - code-review: 代码审查最佳实践...
+  - excel-operation-skill: 基于Java+JBang实现的Excel自动化操作技能 [excel, jbang]
+  - mcp-builder: Build MCP servers for any service [mcp, server, api]
+
+如果需要进一步加载资源或脚本，可以在 skills/ 目录下进行搜索，禁止自己创建资源或脚本文件
 ```
 
 ### 7. loadSkillTool 定义
@@ -213,7 +249,7 @@ public static ChatCompletionTool loadSkillTool() {
 
     Map<String, JsonValue> nameProp = new HashMap<>();
     nameProp.put("type", JsonValue.from("string"));
-    nameProp.put("description", JsonValue.from("技能名称，如 agent-builder, mcp-builder"));
+    nameProp.put("description", JsonValue.from("技能名称，如 excel"));
 
     paramMap.put("properties", JsonValue.from(Map.of("name", JsonValue.from(nameProp))));
     paramMap.put("required", JsonValue.from(List.of("name")));
@@ -238,7 +274,7 @@ public static ChatCompletionTool loadSkillTool() {
 | 存在形式 | 可执行代码 | 文档/Markdown |
 | 注入方式 | 工具定义 (JSON Schema) | `<skill>` 标签包裹的文本 |
 | 加载时机 | 始终可用 | 按需调用 |
-| 示例 | bash, readFile | agent-builder, code-review |
+| 示例 | bash, readFile | excel |
 
 ## 相对 s04 的变更
 
@@ -251,8 +287,7 @@ public static ChatCompletionTool loadSkillTool() {
 ## 试试看
 
 1. `有哪些可用技能？`
-2. `我需要进行代码审查——先加载相关技能`
-3. `使用 mcp-builder 技能构建一个 MCP 服务器`
+2. `加载 excel 技能，帮我把 data.xlsx 的第一个 sheet 导出为 CSV`
 
 ## 核心要义
 

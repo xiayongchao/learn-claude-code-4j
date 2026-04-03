@@ -122,7 +122,12 @@ private static ToolHandlers leadToolHandlers = ToolHandlers.of()
     .add("readFile", (ToolHandlers.LeadToolCall) (agent, args) -> Tools.runReadFile(args))
     .add("writeFile", (ToolHandlers.LeadToolCall) (agent, args) -> Tools.runWriteFile(args))
     .add("editFile", (ToolHandlers.LeadToolCall) (agent, args) -> Tools.runEditFile(args))
-    .add("spawnTeammate", (ToolHandlers.LeadToolCall) (agent, args) -> agent.spawnTeammate(args, teammateTools, teammateToolHandlers))
+    .add("spawnTeammate", (ToolHandlers.LeadToolCall) (agent, arguments)
+            -> agent.spawnTeammate(arguments, teammateTools, teammateToolHandlers
+            , baseAgent -> String
+                    .format("你是: %s, 角色: %s, 工作目录: %s"
+                            , baseAgent.getName(), baseAgent.getRole()
+                            , baseAgent.getConfig().getWorkDir())))
     .add("listTeammates", (ToolHandlers.LeadToolCall) Agent::listTeammate)
     .add("sendMessage", (ToolHandlers.LeadToolCall) Agent::sendMessage)
     .add("readInbox", (ToolHandlers.LeadToolCall) Agent::readInbox)
@@ -135,14 +140,13 @@ private static ToolHandlers leadToolHandlers = ToolHandlers.of()
 AgentConfig config = AgentConfig.of();
 config.setReadInbox(true);
 config.setWorkDir(Commons.CWD);
-config.setTrackerLock(null);
 
 Agent agent = Agent.of();
 agent.setName(LEAD);
 agent.setModel(QWEN_3_5_PLUS);
-agent.setPrompt("你是 " + Commons.CWD + " 工作目录下的团队负责人。创建团队成员，并通过收件箱进行通信协作");
+agent.setPromptProvider(baseAgent -> "你是 " + Commons.CWD + " 工作目录下的团队负责人。创建团队成员，并通过收件箱进行通信协作");
 agent.setBus(bus);
-agent.setTeammateManager(teammateManager);
+agent.setTeam(team);
 agent.setTools(leadTools);
 agent.setToolHandlers(leadToolHandlers);
 agent.setConfig(config);
@@ -209,7 +213,7 @@ public class MessageBus {
 |------|-----|-----|
 | 架构 | 内联 agentLoop | Agent 框架 |
 | 工具注册 | `Map<String, Function>` | `ToolHandlers` |
-| 团队管理 | 无 | `TeammateManager` |
+| 团队管理 | 无 | `Team` |
 | 消息通信 | 无 | `MessageBus` |
 | 配置文件 | 无 | `AgentConfig` |
 | 并发 | 后台任务单线程 | 团队多线程 |

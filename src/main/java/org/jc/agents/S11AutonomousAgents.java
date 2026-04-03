@@ -1,6 +1,8 @@
 package org.jc.agents;
 
-import com.openai.models.chat.completions.*;
+import com.openai.models.chat.completions.ChatCompletionMessageParam;
+import com.openai.models.chat.completions.ChatCompletionTool;
+import com.openai.models.chat.completions.ChatCompletionUserMessageParam;
 import org.jc.Commons;
 import org.jc.Tools;
 import org.jc.agent.Agent;
@@ -8,15 +10,19 @@ import org.jc.agent.AgentConfig;
 import org.jc.agent.TeammateAgent;
 import org.jc.agent.ToolHandlers;
 import org.jc.message.MessageBus;
+import org.jc.task.TaskBoard;
 import org.jc.team.Team;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Scanner;
 
-public class S10TeamProtocols {
+public class S11AutonomousAgents {
     public static final String QWEN_3_5_PLUS = "qwen3.5-plus";
     public static final String LEAD = "lead";
     private static Team team = new Team(Commons.TEAM_DIR);
     private static MessageBus bus = new MessageBus(Commons.INBOX_DIR);
+    private static TaskBoard taskBoard = new TaskBoard(Commons.TASK_DIR);
 
     private static List<ChatCompletionTool> teammateTools = List.of(
             Tools.bashTool()
@@ -27,6 +33,9 @@ public class S10TeamProtocols {
             , Tools.readInboxTool()
             , Tools.teammateShutdownResponseTool()
             , Tools.planApprovalTool()
+
+            , Tools.idleTool()
+            , Tools.claimTaskTool()
     );
     private static ToolHandlers teammateToolHandlers = ToolHandlers.of()
             .add("bash", (ToolHandlers.TeammateToolCall) (agent, arguments) -> Tools.runBash(arguments))
@@ -36,7 +45,11 @@ public class S10TeamProtocols {
             .add("sendMessage", (ToolHandlers.TeammateToolCall) (agent, arguments) -> agent.getLead().sendMessage(arguments))
             .add("readInbox", (ToolHandlers.TeammateToolCall) (agent, arguments) -> agent.getLead().readInbox(arguments))
             .add("shutdownResponse", (ToolHandlers.TeammateToolCall) TeammateAgent::shutdownResponse)
-            .add("planApproval", (ToolHandlers.TeammateToolCall) TeammateAgent::planApproval);
+            .add("planApproval", (ToolHandlers.TeammateToolCall) TeammateAgent::planApproval)
+
+            .add("idle", (ToolHandlers.TeammateToolCall) (agent, arguments) -> Tools.runIdle())
+            .add("claimTask", (ToolHandlers.TeammateToolCall) (agent, arguments)
+                    -> agent.getLead().claimTask(arguments, agent.getName()));
 
     private static List<ChatCompletionTool> leadTools = List.of(
             Tools.bashTool()
@@ -51,6 +64,12 @@ public class S10TeamProtocols {
             , Tools.shutdownRequestTool()
             , Tools.leadShutdownResponseTool()
             , Tools.planReviewTool()
+            , Tools.claimTaskTool()
+
+            , Tools.taskCreateTool()
+            , Tools.taskUpdateTool()
+            , Tools.taskListTool()
+            , Tools.taskGetTool()
     );
     private static ToolHandlers leadToolHandlers = ToolHandlers.of()
             .add("bash", (ToolHandlers.LeadToolCall) (agent, arguments) -> Tools.runBash(arguments))
@@ -60,8 +79,8 @@ public class S10TeamProtocols {
             .add("spawnTeammate", (ToolHandlers.LeadToolCall) (agent, arguments)
                     -> agent.spawnTeammate(arguments, teammateTools, teammateToolHandlers
                     , baseAgent -> String
-                            .format("你是: %s, 角色: %s, 工作目录: %s"
-                                    , baseAgent.getName(), baseAgent.getRole()
+                            .format("你是: %s, 角色: %s, 所属团队: %s, 工作目录: %s。若无待办工作，请使用闲置工具，系统将自动为你认领新任务"
+                                    , baseAgent.getName(), baseAgent.getRole(), baseAgent.getTeam().getTeamName()
                                     , baseAgent.getConfig().getWorkDir())))
             .add("listTeammates", (ToolHandlers.LeadToolCall) (agent, arguments) -> agent.getTeam().listTeammate())
             .add("sendMessage", (ToolHandlers.LeadToolCall) Agent::sendMessage)
@@ -69,15 +88,23 @@ public class S10TeamProtocols {
             .add("broadcast", (ToolHandlers.LeadToolCall) Agent::broadcast)
             .add("shutdownRequest", (ToolHandlers.LeadToolCall) Agent::shutdownRequest)
             .add("shutdownResponse", (ToolHandlers.LeadToolCall) Agent::shutdownResponse)
-            .add("planReview", (ToolHandlers.LeadToolCall) Agent::planReview);
+            .add("planReview", (ToolHandlers.LeadToolCall) Agent::planReview)
+            .add("claimTask", (ToolHandlers.LeadToolCall) (agent, arguments)
+                    -> agent.claimTask(arguments, agent.getName()))
+
+
+            .add("taskCreate", (ToolHandlers.LeadToolCall) (agent, arguments) -> agent.getTaskBoard().create(arguments))
+            .add("taskUpdate", (ToolHandlers.LeadToolCall) (agent, arguments) -> agent.getTaskBoard().update(arguments))
+            .add("taskList", (ToolHandlers.LeadToolCall) (agent, arguments) -> agent.getTaskBoard().renderList())
+            .add("taskGet", (ToolHandlers.LeadToolCall) (agent, arguments) -> agent.getTaskBoard().render(arguments));
+
 
     /**
      * 测试输入：
      * <p>
-     * 先生成程序员 alice，然后你再发送关闭请求给她
-     * 列出队员，查看 alice 在关闭获批后的状态
-     * 生成 bob 并分配一项高风险重构任务。审核并拒绝他的计划
-     * 生成 charlie，让他提交一项计划，然后批准该计划
+     * 在任务面板上创建 3 个任务，然后生成成员 Alice 和 Bob，观察他们自动认领任务。
+     * 生成一名程序员队友，让其从任务面板中自行寻找并执行任务。
+     * 创建带有依赖关系的任务，观察团队成员遵循阻塞顺序执行任务。
      *
      * @param args
      */
@@ -103,14 +130,15 @@ public class S10TeamProtocols {
                                 .build()
                 ));
 
+
                 AgentConfig teammateConfig = AgentConfig.of();
                 teammateConfig.setReadInbox(true);
                 teammateConfig.setWorkDir(Commons.CWD);
-                teammateConfig.setShutdownResponse(null);
-                teammateConfig.setEnableIdlePoll(false);
-                teammateConfig.setIdleTimeout(0);
-                teammateConfig.setPollInterval(0);
+                teammateConfig.setShutdownResponse("direct");
+                teammateConfig.setEnableIdlePoll(true);
                 teammateConfig.setTeammateConfig(null);
+                teammateConfig.setIdleTimeout(5 * 60 * 1000);
+                teammateConfig.setPollInterval(5 * 1000);
 
                 AgentConfig config = AgentConfig.of();
                 config.setReadInbox(true);
@@ -119,10 +147,10 @@ public class S10TeamProtocols {
 
                 Agent agent = Agent.of();
                 agent.setName(LEAD);
-                agent.setPromptProvider(baseAgent -> "你是 " + Commons.CWD
-                        + " 工作目录下的团队负责人。创建团队成员，并通过收件箱进行通信协作");
+                agent.setPromptProvider(baseAgent -> "你是 " + Commons.CWD + " 目录的团队负责人。团队成员具备自主工作能力，会自行寻找任务开展工作");
                 agent.setModel(QWEN_3_5_PLUS);
                 agent.setBus(bus);
+                agent.setTaskBoard(taskBoard);
                 agent.setTeam(team);
                 agent.setTools(leadTools);
                 agent.setToolHandlers(leadToolHandlers);

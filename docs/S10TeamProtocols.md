@@ -95,13 +95,23 @@ private static ToolHandlers teammateToolHandlers = ToolHandlers.of()
     .add("planApproval", (ToolHandlers.TeammateToolCall) TeammateAgent::planApproval);          // 新增
 
 private static ToolHandlers leadToolHandlers = ToolHandlers.of()
-    .add("bash", ...)
-    .add("spawnTeammate", ...)
-    .add("sendMessage", ...)
-    // ...
-    .add("shutdownRequest", (ToolHandlers.LeadToolCall) Agent::shutdownRequest)   // 新增
-    .add("shutdownResponse", (ToolHandlers.LeadToolCall) Agent::shutdownResponse)  // 新增
-    .add("planReview", (ToolHandlers.LeadToolCall) Agent::planReview);             // 新增
+    .add("bash", (ToolHandlers.LeadToolCall) (agent, arguments) -> Tools.runBash(arguments))
+    .add("readFile", (ToolHandlers.LeadToolCall) (agent, arguments) -> Tools.runReadFile(arguments))
+    .add("writeFile", (ToolHandlers.LeadToolCall) (agent, arguments) -> Tools.runWriteFile(arguments))
+    .add("editFile", (ToolHandlers.LeadToolCall) (agent, arguments) -> Tools.runEditFile(arguments))
+    .add("spawnTeammate", (ToolHandlers.LeadToolCall) (agent, arguments)
+            -> agent.spawnTeammate(arguments, teammateTools, teammateToolHandlers
+            , baseAgent -> String
+                    .format("你是: %s, 角色: %s, 工作目录: %s"
+                            , baseAgent.getName(), baseAgent.getRole()
+                            , baseAgent.getConfig().getWorkDir())))
+    .add("listTeammates", (ToolHandlers.LeadToolCall) (agent, arguments) -> agent.getTeam().listTeammate())
+    .add("sendMessage", (ToolHandlers.LeadToolCall) Agent::sendMessage)
+    .add("readInbox", (ToolHandlers.LeadToolCall) Agent::readInbox)
+    .add("broadcast", (ToolHandlers.LeadToolCall) Agent::broadcast)
+    .add("shutdownRequest", (ToolHandlers.LeadToolCall) Agent::shutdownRequest)
+    .add("shutdownResponse", (ToolHandlers.LeadToolCall) Agent::shutdownResponse)
+    .add("planReview", (ToolHandlers.LeadToolCall) Agent::planReview);
 ```
 
 ### 3. 协议说明
@@ -147,12 +157,9 @@ Teammate                Lead
 ### 4. 配置
 
 ```java
-private static Object trackerLock = new Object();
-
 AgentConfig config = AgentConfig.of();
 config.setReadInbox(true);
 config.setWorkDir(Commons.CWD);
-config.setTrackerLock(trackerLock);  // 用于同步协议状态
 ```
 
 ## 相对 s09 的变更
@@ -163,7 +170,6 @@ config.setTrackerLock(trackerLock);  // 用于同步协议状态
 | 计划协议 | 无 | planReview / planApproval |
 | Teammate 工具 | 6 个 | 8 个 |
 | Lead 工具 | 9 个 | 12 个 |
-| 配置 | 无 | trackerLock 同步锁 |
 
 ## 试试看
 
