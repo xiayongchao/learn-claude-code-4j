@@ -71,6 +71,8 @@ public class S10SpawnTeammateTool extends BaseTool<SpawnTeammateToolArgs> {
         state.setWorkDir(workDir);
         state.setLead(States.get().getName());
         state.setMessages(new ArrayList<>());
+        state.setShutdownLock(States.get().getShutdownLock());
+        state.setPlanLock(States.get().getPlanLock());
 
         //设置队友
         this.teammate(name, role);

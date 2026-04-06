@@ -57,12 +57,24 @@ public class PlanReviewTool extends BaseTool<PlanReviewToolArgs> {
         Boolean approve = arguments.getApprove();
         String feedback = arguments.getFeedback();
 
-        PlanRequest planRequest = this.planRequests.get(requestId);
+        PlanRequest planRequest;
+        States.get().getPlanLock().lock();
+        try {
+            planRequest = this.planRequests.get(requestId);
+        } finally {
+            States.get().getPlanLock().unlock();
+        }
+
         if (planRequest == null) {
             return String.format("错误：未知的计划请求ID %s", requestId);
         }
 
-        planRequest.setStatus(Boolean.TRUE.equals(approve) ? "approved" : "rejected");
+        States.get().getPlanLock().lock();
+        try {
+            planRequest.setStatus(Boolean.TRUE.equals(approve) ? "approved" : "rejected");
+        } finally {
+            States.get().getPlanLock().unlock();
+        }
 
         HashMap<String, Object> extra = Maps.newHashMap();
         extra.put("requestId", requestId);

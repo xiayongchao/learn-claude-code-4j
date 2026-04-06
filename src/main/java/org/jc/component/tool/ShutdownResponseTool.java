@@ -58,10 +58,15 @@ public class ShutdownResponseTool extends BaseTool<ShutdownResponseToolArgs> {
         Boolean approve = arguments.getApprove();
         String reason = arguments.getReason();
 
-        ShutdownRequest shutdownRequest = this.shutdownRequests.get(requestId);
-        if (shutdownRequest != null) {
-            shutdownRequest.setStatus(Boolean.TRUE.equals(approve)
-                    ? ShutdownRequestStatus.APPROVED.getValue() : ShutdownRequestStatus.REJECTED.getValue());
+        States.get().getShutdownLock().lock();
+        try {
+            ShutdownRequest shutdownRequest = this.shutdownRequests.get(requestId);
+            if (shutdownRequest != null) {
+                shutdownRequest.setStatus(Boolean.TRUE.equals(approve)
+                        ? ShutdownRequestStatus.APPROVED.getValue() : ShutdownRequestStatus.REJECTED.getValue());
+            }
+        } finally {
+            States.get().getShutdownLock().unlock();
         }
 
         HashMap<String, Object> extra = Maps.newHashMap();

@@ -3,6 +3,7 @@ package org.jc.component.state;
 import com.openai.models.chat.completions.ChatCompletionMessageParam;
 
 import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class TeammateState implements State {
     private String name;
@@ -18,6 +19,8 @@ public class TeammateState implements State {
     private long idleTimeout;
     private long pollInterval;
     private List<ChatCompletionMessageParam> messages;
+    private ReentrantLock shutdownLock;
+    private ReentrantLock planLock;
 
     public String getName() {
         return name;
@@ -122,5 +125,23 @@ public class TeammateState implements State {
 
     public void setMessages(List<ChatCompletionMessageParam> messages) {
         this.messages = messages;
+    }
+
+    @Override
+    public ReentrantLock getShutdownLock() {
+        return shutdownLock;
+    }
+
+    public void setShutdownLock(ReentrantLock shutdownLock) {
+        this.shutdownLock = shutdownLock;
+    }
+
+    @Override
+    public ReentrantLock getPlanLock() {
+        return planLock;
+    }
+
+    public void setPlanLock(ReentrantLock planLock) {
+        this.planLock = planLock;
     }
 }

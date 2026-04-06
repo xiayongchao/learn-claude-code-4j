@@ -3,6 +3,7 @@ package org.jc.component.state;
 import com.openai.models.chat.completions.ChatCompletionMessageParam;
 
 import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class LeadState implements State {
     private String name;
@@ -11,17 +12,22 @@ public class LeadState implements State {
     private String prompt;
     private String workDir;
     private List<ChatCompletionMessageParam> messages;
+    private ReentrantLock shutdownLock;
+    private ReentrantLock planLock;
 
     public LeadState() {
     }
 
-    public LeadState(String name, String role, String model, String prompt, String workDir, List<ChatCompletionMessageParam> messages) {
+    public LeadState(String name, String role, String model, String prompt, String workDir
+            , List<ChatCompletionMessageParam> messages, ReentrantLock shutdownLock, ReentrantLock planLock) {
         this.name = name;
         this.role = role;
         this.model = model;
         this.prompt = prompt;
         this.workDir = workDir;
         this.messages = messages;
+        this.shutdownLock = shutdownLock == null ? new ReentrantLock() : shutdownLock;
+        this.planLock = planLock == null ? new ReentrantLock() : planLock;
     }
 
     public String getName() {
@@ -77,6 +83,22 @@ public class LeadState implements State {
         return messages == null || messages.isEmpty() ? null : messages.get(messages.size() - 1);
     }
 
+    public ReentrantLock getShutdownLock() {
+        return shutdownLock;
+    }
+
+    public void setShutdownLock(ReentrantLock shutdownLock) {
+        this.shutdownLock = shutdownLock;
+    }
+
+    public ReentrantLock getPlanLock() {
+        return planLock;
+    }
+
+    public void setPlanLock(ReentrantLock planLock) {
+        this.planLock = planLock;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -87,6 +109,8 @@ public class LeadState implements State {
         private String model;
         private String prompt;
         private String workDir;
+        private ReentrantLock shutdownLock;
+        private ReentrantLock planLock;
         private List<ChatCompletionMessageParam> messages;
 
 
@@ -124,8 +148,18 @@ public class LeadState implements State {
             return this;
         }
 
+        public Builder shutdownLock(ReentrantLock shutdownLock) {
+            this.shutdownLock = shutdownLock;
+            return this;
+        }
+
+        public Builder planLock(ReentrantLock planLock) {
+            this.planLock = planLock;
+            return this;
+        }
+
         public LeadState build() {
-            return new LeadState(name, role, model, prompt, workDir, messages);
+            return new LeadState(name, role, model, prompt, workDir, messages, shutdownLock, planLock);
         }
     }
 }

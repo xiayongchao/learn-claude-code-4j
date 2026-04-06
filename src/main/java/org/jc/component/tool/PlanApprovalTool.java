@@ -26,7 +26,7 @@ public class PlanApprovalTool extends BaseTool<PlanApprovalToolArgs> {
                 {
                     "type": "function",
                     "function": {
-                        "name": "plan_approval",
+                        "name": "planApproval",
                         "description": "提交计划以供负责人审批，请提供计划内容",
                         "parameters": {
                             "type": "object",
@@ -51,8 +51,13 @@ public class PlanApprovalTool extends BaseTool<PlanApprovalToolArgs> {
         String plan = arguments.getPlan();
         String requestId = UUID.randomUUID().toString().substring(0, 8);
 
-        this.planRequests.put(requestId, new PlanRequest(States.get().getName()
-                , plan, PlanRequestStatus.PENDING.getValue()));
+        States.get().getPlanLock().lock();
+        try {
+            this.planRequests.put(requestId, new PlanRequest(States.get().getName()
+                    , plan, PlanRequestStatus.PENDING.getValue()));
+        } finally {
+            States.get().getPlanLock().unlock();
+        }
 
 
         HashMap<String, Object> extra = Maps.newHashMap();

@@ -2,6 +2,7 @@ package org.jc.component.tool;
 
 import com.alibaba.fastjson2.JSON;
 import com.google.inject.Inject;
+import org.jc.component.state.States;
 import org.jc.component.tool.args.ShutdownCheckToolArgs;
 import org.jc.component.shutdown.ShutdownRequests;
 
@@ -37,7 +38,12 @@ public class ShutdownCheckTool extends BaseTool<ShutdownCheckToolArgs> {
 
     @Override
     public String doCall(ShutdownCheckToolArgs arguments) {
-        String requestId = arguments.getRequestId();
-        return JSON.toJSONString(this.shutdownRequests.get(requestId));
+        States.get().getShutdownLock().lock();
+        try {
+            String requestId = arguments.getRequestId();
+            return JSON.toJSONString(this.shutdownRequests.get(requestId));
+        } finally {
+            States.get().getShutdownLock().unlock();
+        }
     }
 }

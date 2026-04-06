@@ -51,8 +51,13 @@ public class ShutdownRequestTool extends BaseTool<ShutdownRequestToolArgs> {
         String teammate = arguments.getTeammate();
         String requestId = UUID.randomUUID().toString().substring(0, 8);
 
-        this.shutdownRequests.put(requestId, new ShutdownRequest(teammate
-                , ShutdownRequestStatus.PENDING.getValue()));
+        States.get().getShutdownLock().lock();
+        try {
+            this.shutdownRequests.put(requestId, new ShutdownRequest(teammate
+                    , ShutdownRequestStatus.PENDING.getValue()));
+        } finally {
+            States.get().getShutdownLock().unlock();
+        }
 
         HashMap<String, Object> extra = Maps.newHashMap();
         extra.put("requestId", requestId);
