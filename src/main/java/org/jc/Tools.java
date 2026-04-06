@@ -6,7 +6,7 @@ import com.openai.core.JsonValue;
 import com.openai.models.FunctionDefinition;
 import com.openai.models.FunctionParameters;
 import com.openai.models.chat.completions.*;
-import org.jc.message.MessageBus;
+import org.jc.component.util.FileUtils;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,10 +20,6 @@ public class Tools {
     public static final String COMPACT = "compact";
 
     /// ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    public static String runIdle() {
-        return "进入空闲阶段，将轮询等待新任务";
-    }
 
     public static String runBash(String arguments) {
         if (dangerous.contains(arguments)) {
@@ -43,7 +39,10 @@ public class Tools {
         JSONObject argument = JSON.parseObject(arguments);
         String path = argument.getString("path");
         Integer limit = argument.getInteger("limit");
+        return Tools.runReadFile(path, limit);
+    }
 
+    public static String runReadFile(String path, Integer limit) {
         if (!Commons.isSafePath(Commons.CWD, path)) {
             return "路径超出工作区：" + path;
         }
@@ -71,6 +70,10 @@ public class Tools {
         JSONObject argument = JSON.parseObject(arguments);
         String path = argument.getString("path");
         String content = argument.getString("content");
+        return Tools.runWriteFile(path, content);
+    }
+
+    public static String runWriteFile(String path, String content) {
         if (!Commons.isSafePath(Commons.CWD, path)) {
             return "错误：路径超出工作区：" + path;
         }
@@ -93,13 +96,17 @@ public class Tools {
         String path = argument.getString("path");
         String oldText = argument.getString("oldText");
         String newText = argument.getString("newText");
+        return Tools.runEditFile(path, oldText, newText);
+    }
+
+    public static String runEditFile(String path, String oldText, String newText) {
         if (!Commons.isSafePath(Commons.CWD, path)) {
             return "错误：路径超出工作区：" + path;
         }
 
         try {
             Path filePath = Paths.get(Commons.CWD).resolve(path);
-            String content = Files.readString(filePath);
+            String content = FileUtils.read(filePath);
 
             if (!content.contains(oldText)) {
                 return "错误：在 " + path + " 中未找到文本";
@@ -114,301 +121,6 @@ public class Tools {
     }
 
     /// ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    public static ChatCompletionTool claimTaskTool() {
-        return ChatCompletionTool.ofFunction(ChatCompletionFunctionTool.builder()
-                .function(FunctionDefinition.builder()
-                        .name("claimTask")
-                        .description("根据任务ID从任务面板认领任务。")
-                        .parameters(FunctionParameters.builder()
-                                .putAllAdditionalProperties(Map.of(
-                                        "type", JsonValue.from("object"),
-                                        "properties", JsonValue.from(Map.of(
-                                                "task_id", JsonValue.from(Map.of(
-                                                        "type", JsonValue.from("integer"),
-                                                        "description", JsonValue.from("任务ID")
-                                                ))
-                                        )),
-                                        "required", JsonValue.from(List.of("task_id"))
-                                ))
-                                .build()
-                        )
-                        .build()
-                )
-                .build()
-        );
-    }
-
-    public static ChatCompletionTool idleTool() {
-        return ChatCompletionTool.ofFunction(ChatCompletionFunctionTool.builder()
-                .function(FunctionDefinition.builder()
-                        .name("idle")
-                        .description("标识当前已无待处理工作，进入空闲轮询状态")
-                        .parameters(FunctionParameters.builder()
-                                .putAllAdditionalProperties(Map.of(
-                                        "type", JsonValue.from("object"),
-                                        "properties", JsonValue.from(Map.of()),
-                                        "required", JsonValue.from(List.of())
-                                ))
-                                .build()
-                        )
-                        .build()
-                )
-                .build()
-        );
-    }
-
-    public static ChatCompletionTool teammateShutdownResponseTool() {
-        return ChatCompletionTool.ofFunction(ChatCompletionFunctionTool.builder()
-                .function(FunctionDefinition.builder()
-                        .name("shutdownResponse")
-                        .description("响应停止请求：批准则执行停止，拒绝则继续工作")
-                        .parameters(FunctionParameters.builder()
-                                .putAllAdditionalProperties(Map.of(
-                                        "type", JsonValue.from("object"),
-                                        "properties", JsonValue.from(Map.of(
-                                                "request_id", JsonValue.from(Map.of(
-                                                        "type", JsonValue.from("string"),
-                                                        "description", JsonValue.from("停止请求的ID")
-                                                )),
-                                                "approve", JsonValue.from(Map.of(
-                                                        "type", JsonValue.from("boolean"),
-                                                        "description", JsonValue.from("是否批准停止")
-                                                )),
-                                                "reason", JsonValue.from(Map.of(
-                                                        "type", JsonValue.from("string"),
-                                                        "description", JsonValue.from("决定的理由")
-                                                ))
-                                        )),
-                                        "required", JsonValue.from(List.of("request_id", "approve"))
-                                ))
-                                .build()
-                        )
-                        .build()
-                )
-                .build());
-    }
-
-    public static ChatCompletionTool planApprovalTool() {
-        return ChatCompletionTool.ofFunction(ChatCompletionFunctionTool.builder()
-                .function(FunctionDefinition.builder()
-                        .name("planApproval")
-                        .description("提交计划以供负责人审批，并提供计划内容。")
-                        .parameters(FunctionParameters.builder()
-                                .putAllAdditionalProperties(Map.of(
-                                        "type", JsonValue.from("object"),
-                                        "properties", JsonValue.from(Map.of(
-                                                "plan", JsonValue.from(Map.of(
-                                                        "type", JsonValue.from("string"),
-                                                        "description", JsonValue.from("计划内容文本")
-                                                ))
-                                        )),
-                                        "required", JsonValue.from(List.of("plan"))
-                                ))
-                                .build()
-                        )
-                        .build()
-                )
-                .build());
-    }
-
-    public static ChatCompletionTool shutdownRequestTool() {
-        return ChatCompletionTool.ofFunction(ChatCompletionFunctionTool.builder()
-                .function(FunctionDefinition.builder()
-                        .name("shutdownRequest")
-                        .description("请求队友优雅停止，返回用于跟踪的request_id")
-                        .parameters(FunctionParameters.builder()
-                                .putAllAdditionalProperties(Map.of(
-                                        "type", JsonValue.from("object"),
-                                        "properties", JsonValue.from(Map.of(
-                                                "teammate", JsonValue.from(Map.of(
-                                                        "type", JsonValue.from("string"),
-                                                        "description", JsonValue.from("队友标识符")
-                                                ))
-                                        )),
-                                        "required", JsonValue.from(List.of("teammate"))
-                                ))
-                                .build()
-                        )
-                        .build()
-                )
-                .build());
-    }
-
-    public static ChatCompletionTool leadShutdownResponseTool() {
-        return ChatCompletionTool.ofFunction(ChatCompletionFunctionTool.builder()
-                .function(FunctionDefinition.builder()
-                        .name("shutdownResponse")
-                        .description("通过request_id查看停止请求的状态")
-                        .parameters(FunctionParameters.builder()
-                                .putAllAdditionalProperties(Map.of(
-                                        "type", JsonValue.from("object"),
-                                        "properties", JsonValue.from(Map.of(
-                                                "request_id", JsonValue.from(Map.of(
-                                                        "type", JsonValue.from("string"),
-                                                        "description", JsonValue.from("要查询的停止请求ID")
-                                                ))
-                                        )),
-                                        "required", JsonValue.from(List.of("request_id"))
-                                ))
-                                .build()
-                        )
-                        .build()
-                )
-                .build());
-    }
-
-    public static ChatCompletionTool planReviewTool() {
-        return ChatCompletionTool.ofFunction(ChatCompletionFunctionTool.builder()
-                .function(FunctionDefinition.builder()
-                        .name("planReview")
-                        .description("批准或拒绝队友的计划。需提供 request_id、approve 以及可选的反馈信息。")
-                        .parameters(FunctionParameters.builder()
-                                .putAllAdditionalProperties(Map.of(
-                                        "type", JsonValue.from("object"),
-                                        "properties", JsonValue.from(Map.of(
-                                                "request_id", JsonValue.from(Map.of(
-                                                        "type", JsonValue.from("string"),
-                                                        "description", JsonValue.from("计划的请求ID")
-                                                )),
-                                                "approve", JsonValue.from(Map.of(
-                                                        "type", JsonValue.from("boolean"),
-                                                        "description", JsonValue.from("是否批准该计划")
-                                                )),
-                                                "feedback", JsonValue.from(Map.of(
-                                                        "type", JsonValue.from("string"),
-                                                        "description", JsonValue.from("针对该决定的可选反馈说明")
-                                                ))
-                                        )),
-                                        "required", JsonValue.from(List.of("request_id", "approve"))
-                                ))
-                                .build()
-                        )
-                        .build()
-                )
-                .build());
-    }
-
-    public static ChatCompletionTool spawnTeammateTool() {
-        return ChatCompletionTool.ofFunction(ChatCompletionFunctionTool.builder()
-                .function(FunctionDefinition.builder()
-                        .name("spawnTeammate")
-                        .description("生成一个在独立线程中运行的常驻团队成员。")
-                        .parameters(FunctionParameters.builder()
-                                .putAllAdditionalProperties(Map.of(
-                                        "type", JsonValue.from("object"),
-                                        "properties", JsonValue.from(Map.of(
-                                                "name", JsonValue.from(Map.of(
-                                                        "type", JsonValue.from("string"),
-                                                        "description", JsonValue.from("成员名称")
-                                                )),
-                                                "role", JsonValue.from(Map.of(
-                                                        "type", JsonValue.from("string"),
-                                                        "description", JsonValue.from("成员角色")
-                                                )),
-                                                "prompt", JsonValue.from(Map.of(
-                                                        "type", JsonValue.from("string"),
-                                                        "description", JsonValue.from("初始任务指令")
-                                                ))
-                                        )),
-                                        "required", JsonValue.from(List.of("name", "role", "prompt"))
-                                ))
-                                .build()
-                        )
-                        .build()
-                )
-                .build());
-    }
-
-    public static ChatCompletionTool listTeammatesTool() {
-        return ChatCompletionTool.ofFunction(ChatCompletionFunctionTool.builder()
-                .function(FunctionDefinition.builder()
-                        .name("listTeammates")
-                        .description("列出所有团队成员的姓名、角色及状态。")
-                        .parameters(FunctionParameters.builder()
-                                .putAllAdditionalProperties(Map.of(
-                                        "type", JsonValue.from("object"),
-                                        "properties", JsonValue.from(Map.of())
-                                ))
-                                .build()
-                        )
-                        .build()
-                )
-                .build());
-    }
-
-    public static ChatCompletionTool sendMessageTool() {
-        return ChatCompletionTool.ofFunction(ChatCompletionFunctionTool.builder()
-                .function(FunctionDefinition.builder()
-                        .name("sendMessage")
-                        .description("向队友的收件箱发送消息")
-                        .parameters(FunctionParameters.builder()
-                                .putAllAdditionalProperties(Map.of(
-                                        "type", JsonValue.from("object"),
-                                        "properties", JsonValue.from(Map.of(
-                                                "to", JsonValue.from(Map.of(
-                                                        "type", JsonValue.from("string"),
-                                                        "description", JsonValue.from("接收者名称")
-                                                )),
-                                                "content", JsonValue.from(Map.of(
-                                                        "type", JsonValue.from("string"),
-                                                        "description", JsonValue.from("消息内容")
-                                                )),
-
-                                                "msgType", JsonValue.from(Map.of(
-                                                        "type", JsonValue.from("string"),
-                                                        "enum", JsonValue.from(MessageBus.VALID_MSG_TYPES),
-                                                        "description", JsonValue.from("消息类型")
-                                                ))
-                                        )),
-                                        "required", JsonValue.from(List.of("to", "content"))
-                                ))
-                                .build()
-                        )
-                        .build()
-                )
-                .build());
-    }
-
-    public static ChatCompletionTool readInboxTool() {
-        return ChatCompletionTool.ofFunction(ChatCompletionFunctionTool.builder()
-                .function(FunctionDefinition.builder()
-                        .name("readInbox")
-                        .description("读取并清空你的收件箱消息")
-                        .parameters(FunctionParameters.builder()
-                                .putAllAdditionalProperties(Map.of(
-                                        "type", JsonValue.from("object"),
-                                        "properties", JsonValue.from(Map.of())
-                                ))
-                                .build()
-                        )
-                        .build()
-                )
-                .build());
-    }
-
-    public static ChatCompletionTool broadcastTool() {
-        return ChatCompletionTool.ofFunction(ChatCompletionFunctionTool.builder()
-                .function(FunctionDefinition.builder()
-                        .name("broadcast")
-                        .description("向所有队友发送消息。")
-                        .parameters(FunctionParameters.builder()
-                                .putAllAdditionalProperties(Map.of(
-                                        "type", JsonValue.from("object"),
-                                        "properties", JsonValue.from(Map.of(
-                                                "content", JsonValue.from(Map.of(
-                                                        "type", JsonValue.from("string"),
-                                                        "description", JsonValue.from("广播内容")
-                                                ))
-                                        )),
-                                        "required", JsonValue.from(List.of("content"))
-                                ))
-                                .build()
-                        )
-                        .build()
-                )
-                .build());
-    }
-
     public static ChatCompletionTool backgroundRunTool() {
         return ChatCompletionTool.ofFunction(ChatCompletionFunctionTool.builder()
                 .function(FunctionDefinition.builder()
@@ -800,18 +512,6 @@ public class Tools {
         ChatCompletionMessageFunctionToolCall.Function function = functionCall.function();
         String functionName = function.name();
         return Objects.equals(tooName, functionName);
-    }
-
-    public static JSONObject getToolArgs(ChatCompletionMessageToolCall toolCall) {
-        if (toolCall == null || !toolCall.isFunction()) {
-            return null;
-        }
-
-        ChatCompletionMessageFunctionToolCall functionCall = toolCall.asFunction();
-        ChatCompletionMessageFunctionToolCall.Function function = functionCall.function();
-        String arguments = function.arguments();
-
-        return arguments == null || arguments.isBlank() ? null : JSON.parseObject(arguments);
     }
 
     public static ChatCompletionMessageParam exe(Map<String, Function<String, String>> TOOL_HANDLERS, ChatCompletionMessageToolCall toolCall) {

@@ -1,240 +1,339 @@
-# S09AgentTeams - Agent 团队：任务太大，一个 Agent 忙不过来
+# S09AgentTeams - Agent 团队：一个 Lead + 多个 Teammate，收件箱通信
 
 ## 核心理念
 
-**"任务太大，一个 Agent 忙不过来" -- 团队协作 + 异步消息队列。**
+**"一个 Lead + 多个 Teammate，通过收件箱异步通信协作" -- 多 Agent 协作的基础架构。**
 
 - 源码：https://github.com/xiayongchao/learn-claude-code-4j/blob/main/src/main/java/org/jc/agents/S09AgentTeams.java
-- 原版：https://github.com/shareAI-lab/learn-claude-code
+- 重构源码：https://github.com/xiayongchao/learn-claude-code-4j/tree/main/src/main/java/org/jc/component
 - 上篇：[S08BackgroundTasks - 后台任务](./S08BackgroundTasks.md)
 
 ## 上篇回顾
 
-上篇文章我们实现了后台任务执行，Agent 不再被慢操作阻塞。
+上篇文章我们实现了后台任务系统，让慢操作不阻塞 Agent 继续工作。
 
 ## 问题
 
-一个 Agent 能力有限：
-- 复杂任务需要多角色协作（前端、后端、测试）
-- 串行执行效率低，有些任务可以并行
-- Agent 之间需要通信协调
+之前所有 Agent 都是独立工作的，单一 Agent 无法：
+- 并行处理多个任务
+- 分工协作完成复杂目标
+- 维护团队成员状态
 
-**解决方案：团队 Agent + 消息队列。**
+**我们需要：多 Agent 协作架构。**
 
 ## 解决方案
 
 ```
-                    Team Lead
-                       |
-        +--------------+---------------+
-        |              |               |
-   spawnTeammate   sendMessage    broadcast
-        |              |               |
-        v              v               v
-   +--------+    +--------+      +--------+
-   | alice  |    |  Bob   |      |  All   |
-   | (前端) |    | (后端) |      |Members |
-   +--------+    +--------+      +--------+
-        |              |
-        +-----> MessageBus <-------+
-                     |
-              inbox/bob.jsonl
+                    ┌─────────────────┐
+                    │      Lead       │  (领导：协调者)
+                    │  (Agent Loop)   │
+                    └────────┬────────┘
+                             │
+              ┌──────────────┼──────────────┐
+              │              │              │
+              ▼              ▼              ▼
+        ┌──────────┐  ┌──────────┐  ┌──────────┐
+        │ Teammate │  │ Teammate │  │ Teammate │
+        │   Alice  │  │    Bob   │  │  Charlie │
+        └────┬─────┘  └────┬─────┘  └────┬─────┘
+             │              │              │
+             └──────────────┴──────────────┘
+                             │
+                    ┌────────▼────────┐
+                    │   MessageBus    │  (消息总线)
+                    │  (收件箱系统)   │
+                    └─────────────────┘
 ```
 
-## 代码演进
+## 重构概览
 
-### 为什么重构？
-
-早期版本用 `Map<String, Function<String, String>>` 管理工具：
-- 代码散落在各 S0x 文件中
-- agentLoop 逻辑重复
-- 难以扩展团队、多 Agent 等复杂场景
-
-### 新架构
+从第9课开始，项目进行了全面的组件化重构：
 
 ```
-Agent (基类)
-├── readInbox()   - 读取收件箱
-├── chat()        - 调用 LLM
-├── toolCall()    - 执行工具
-├── loop()        - 主循环
-└── getLead()     - 获取 Lead Agent（供 Teammate 使用）
-
-ToolHandlers (工具注册器)
-├── LeadToolCall     - Lead Agent 专用
-└── TeammateToolCall - TeammateAgent 专用
-
-AgentConfig (配置)
-├── readInbox
-├── workDir
-└── trackerLock
-
-TeammateAgent (队友 Agent，继承 Agent)
+src/main/java/org/jc/
+├── agents/              # Agent 入口类
+├── component/           # 核心组件
+│   ├── loop/           # ReAct 循环
+│   ├── tool/           # 工具集
+│   ├── team/           # 团队管理
+│   ├── state/          # 状态管理
+│   ├── inbox/          # 消息收件箱
+│   └── util/           # 工具类
+└── Commons.java        # 公共常量
 ```
 
-### 关键设计
+### 依赖注入：Google Guice
 
-**1. 工具处理器分离**
-
-Lead 和 Teammate 使用不同的接口，避免类型混乱：
+使用 Guice 进行依赖管理：
 
 ```java
-public interface LeadToolCall {
-    String call(Agent agent, String arguments);
+public class S09AgentTeams extends AbstractModule {
+    @Override
+    protected void configure() {
+        // 领导工具
+        Multibinder<LeadTool> leadToolBinder = Multibinder.newSetBinder(binder(), LeadTool.class);
+        leadToolBinder.addBinding().to(BashTool.class);
+        leadToolBinder.addBinding().to(ReadFileTool.class);
+        // ...
+        
+        // 队员工具
+        Multibinder<TeammateTool> teammateToolBinder = Multibinder.newSetBinder(binder(), TeammateTool.class);
+        // ...
+        
+        // 核心服务
+        bind(OpenAIClient.class).toInstance(Commons.getClient());
+        bind(MessageBus.class).in(Singleton.class);
+        bind(Team.class).in(Singleton.class);
+        bind(ReActs.class).to(ReActsImpl.class);
+    }
 }
+```
 
-public interface TeammateToolCall {
-    String call(TeammateAgent agent, String arguments);
+## 核心组件详解
+
+### 1. State 状态管理
+
+```java
+public interface State {
+    String getName();
+    String getRole();
+    String getModel();
+    String getPrompt();
+    String getWorkDir();
+    List<ChatCompletionMessageParam> getMessages();
 }
 ```
 
-**2. Teammate 通过 getLead() 访问 Lead**
+LeadState vs TeammateState：
+
+| 属性 | LeadState | TeammateState |
+|------|-----------|---------------|
+| messages | ✓ | ✓ |
+| shutdown | - | ✓ |
+| idle | - | ✓ |
+| maxLoopTimes | - | ✓ |
+
+### 2. States ThreadLocal 状态传递
 
 ```java
-// 队友发送消息需要通过 Lead
-.add("sendMessage", (agent, args) -> agent.getLead().sendMessage(args))
+public class States {
+    private static final ThreadLocal<State> CTX = new ThreadLocal<>();
+    
+    public static void set(State state) { CTX.set(state); }
+    public static State get() { return CTX.get(); }
+    public static LeadState lead() { return (LeadState) get(); }
+    public static TeammateState teammate() { return (TeammateState) get(); }
+    public static void clear() { CTX.remove(); }
+}
 ```
 
-## Java 实现详解
-
-### 1. 团队角色划分
-
-| 角色 | 描述 |
-|------|------|
-| Team Lead（主 Agent） | 负责任务分配、协调、汇总 |
-| Teammate（队友 Agent） | 负责执行具体任务，相互通信 |
-
-### 2. 工具注册：ToolHandlers
+### 3. ReActs 接口
 
 ```java
-// 队友工具（不含 spawn，避免递归）
-private static ToolHandlers teammateToolHandlers = ToolHandlers.of()
-    .add("bash", (ToolHandlers.TeammateToolCall) (agent, args) -> Tools.runBash(args))
-    .add("readFile", (ToolHandlers.TeammateToolCall) (agent, args) -> Tools.runReadFile(args))
-    .add("writeFile", (ToolHandlers.TeammateToolCall) (agent, args) -> Tools.runWriteFile(args))
-    .add("editFile", (ToolHandlers.TeammateToolCall) (agent, args) -> Tools.runEditFile(args))
-    .add("sendMessage", (ToolHandlers.TeammateToolCall) (agent, args) -> agent.getLead().sendMessage(args))
-    .add("readInbox", (ToolHandlers.TeammateToolCall) (agent, args) -> agent.getLead().readInbox(args));
-
-// Lead 工具（包含团队管理）
-private static ToolHandlers leadToolHandlers = ToolHandlers.of()
-    .add("bash", (ToolHandlers.LeadToolCall) (agent, args) -> Tools.runBash(args))
-    .add("readFile", (ToolHandlers.LeadToolCall) (agent, args) -> Tools.runReadFile(args))
-    .add("writeFile", (ToolHandlers.LeadToolCall) (agent, args) -> Tools.runWriteFile(args))
-    .add("editFile", (ToolHandlers.LeadToolCall) (agent, args) -> Tools.runEditFile(args))
-    .add("spawnTeammate", (ToolHandlers.LeadToolCall) (agent, arguments)
-            -> agent.spawnTeammate(arguments, teammateTools, teammateToolHandlers
-            , baseAgent -> String
-                    .format("你是: %s, 角色: %s, 工作目录: %s"
-                            , baseAgent.getName(), baseAgent.getRole()
-                            , baseAgent.getConfig().getWorkDir())))
-    .add("listTeammates", (ToolHandlers.LeadToolCall) Agent::listTeammate)
-    .add("sendMessage", (ToolHandlers.LeadToolCall) Agent::sendMessage)
-    .add("readInbox", (ToolHandlers.LeadToolCall) Agent::readInbox)
-    .add("broadcast", (ToolHandlers.LeadToolCall) Agent::broadcast);
+public interface ReActs {
+    ChatCompletionMessageParam start(LeadState state);  // 领导同步执行
+    void start(TeammateState state);                     // 队员异步执行
+}
 ```
 
-### 3. Agent 配置与调用
+### 4. ReActsImpl 实现
 
 ```java
-AgentConfig config = AgentConfig.of();
-config.setReadInbox(true);
-config.setWorkDir(Commons.CWD);
-
-Agent agent = Agent.of();
-agent.setName(LEAD);
-agent.setModel(QWEN_3_5_PLUS);
-agent.setPromptProvider(baseAgent -> "你是 " + Commons.CWD + " 工作目录下的团队负责人。创建团队成员，并通过收件箱进行通信协作");
-agent.setBus(bus);
-agent.setTeam(team);
-agent.setTools(leadTools);
-agent.setToolHandlers(leadToolHandlers);
-agent.setConfig(config);
-
-ChatCompletionMessageParam last = agent.loop(messages);
+public class ReActsImpl implements ReActs {
+    private final ThreadPoolExecutor theadPools = new ThreadPoolExecutor(0, 5,
+            300, TimeUnit.SECONDS, new ArrayBlockingQueue<>(50),
+            AiThreadFactory.create("loop", true));
+    
+    private final LeadReAct leadReAct;
+    private final TeammateReAct teammateReAct;
+    
+    public ChatCompletionMessageParam start(LeadState state) {
+        try {
+            States.set(state);
+            leadReAct.loop();
+            return States.lead().getLastMessage();
+        } finally {
+            States.clear();
+        }
+    }
+    
+    public void start(TeammateState state) {
+        theadPools.submit(() -> {
+            try {
+                States.set(state);
+                teammateReAct.loop();
+            } finally {
+                States.clear();
+            }
+        });
+    }
+}
 ```
 
-### 4. MessageBus：消息总线
-
-消息写入 `inbox/{收件人}.jsonl` 文件，实现异步队列：
+### 5. MessageBus 消息总线
 
 ```java
 public class MessageBus {
-    public String send(String sender, String to, String content, String msgType, Map<String, Object> extra) {
-        Message msg = new Message(msgType, sender, content, timestamp, extra);
-        Path inboxPath = dirPath.resolve(to + ".jsonl");
-        Files.write(inboxPath, line.getBytes(), APPEND);
-        return "发送 " + msgType + " 给 " + to;
+    private Path getInboxPath(String to) {
+        return FileUtils.resolve(States.get().getWorkDir(),
+                String.format("inbox/%s.jsonl", to), true);
     }
-
-    public List<Message> readInbox(String name, boolean json) {
-        // 读取并清空 inbox
+    
+    public void send(String to, InBoxMessage message) throws IOException {
+        Path inboxPath = this.getInboxPath(to);
+        FileUtils.write(inboxPath, JSON.toJSONString(message) + "\n");
     }
-
-    public String broadcast(String sender, List<String> teammates) {
-        // 向所有队友广播
+    
+    public List<InBoxMessage> readInbox(String name, boolean clear) throws IOException {
+        List<InBoxMessage> messages = FileUtils.readList(inboxPath, InBoxMessage.class);
+        if (clear) {
+            FileUtils.clear(inboxPath);  // 读取后清空
+        }
+        return messages;
     }
 }
 ```
 
-### 5. 消息类型
+### 6. Team 团队管理
 
-| 类型 | 说明 |
-|------|------|
-| message | 点对点消息 |
-| broadcast | 广播给所有人 |
-| command | 命令（如 "执行测试"） |
-| response | 回复（如 "测试完成，结果如下"） |
+```java
+public class Team {
+    public void setTeammateIdle() { /* 更新状态为 idle */ }
+    public void setTeammateShutdown() { /* 更新状态为 shutdown */ }
+    public void setTeammateWorking() { /* 更新状态为 working */ }
+    public String render() { /* 列出团队成员 */ }
+    public List<String> getTeammateNames() { /* 获取成员名称列表 */ }
+}
+```
 
-## 团队协作流程
+配置文件 `team/config.json`：
+
+```json
+{
+  "teamName": "default",
+  "teammates": [
+    {"name": "alice", "role": "programmer", "status": "working"},
+    {"name": "bob", "role": "tester", "status": "idle"}
+  ]
+}
+```
+
+### 7. Tool 工具体系
+
+```java
+public interface Tool extends LeadTool, TeammateTool {
+    String name();
+    ChatCompletionTool definition();
+    String call(String arguments);
+}
+
+public abstract class BaseTool<T> implements Tool {
+    private final String name;
+    private final Class<T> tClass;
+    private final ChatCompletionTool definition;
+    
+    @Override
+    public String call(String arguments) {
+        return this.doCall(JSON.parseObject(arguments, tClass));
+    }
+    
+    public abstract String doCall(T arguments);
+}
+```
+
+### 8. LeadReAct 领导循环
+
+```java
+public class LeadReAct {
+    public void loop() {
+        List<ChatCompletionMessageParam> messages = States.get().getMessages();
+        while (true) {
+            this.readInbox(messages);           // 读取收件箱
+            ChatCompletionAssistantMessageParam assistantMessage = this.chat(messages);
+            Optional<List<ChatCompletionMessageToolCall>> toolCallsOptional = assistantMessage.toolCalls();
+            if (toolCallsOptional.isEmpty()) break;
+            this.callTools(toolCallsOptional.get(), messages);
+        }
+    }
+}
+```
+
+### 9. S09SpawnTeammateTool 创建队员
+
+```java
+public class S09SpawnTeammateTool extends BaseTool<SpawnTeammateToolArgs> {
+    public String doCall(SpawnTeammateToolArgs arguments) {
+        TeammateState state = new TeammateState();
+        state.setName(name);
+        state.setRole(role);
+        state.setPrompt(String.format("你是 '%s', 角色: %s, 工作目录 %s...",
+                name, role, workDir));
+        state.setMaxLoopTimes(50);
+        
+        this.teammate(name, role);     // 注册到团队
+        this.reActs.start(state);       // 异步启动
+        return String.format("创建 '%s' (角色: %s)", name, role);
+    }
+}
+```
+
+## 执行流程图
 
 ```
-1. Lead 调用 spawnTeammate("alice", "前端", "开发用户界面")
-          |
-          v
-2. TeammateAgent 启动 alice 线程
-          |
-          v
-3. alice 运行自己的 loop，读取收件箱
-          |
-          v
-4. Lead 或其他队友调用 sendMessage(to="alice", content="任务详情")
-          |
-          v
-5. alice 收到消息，处理并可能回复
-          |
-          v
-6. Lead 读取 inbox 查看结果
+1. Lead 调用 spawnTeammate("alice", "programmer", "编写代码")
+           │
+           ▼
+2. 创建 TeammateState，设置 name/role/prompt
+           │
+           ▼
+3. Team 注册 alice 到 team/config.json
+           │
+           ▼
+4. ReActs.start() 提交到线程池异步执行
+           │
+           ▼
+5. S09TeammateReAct.loop() 开始工作
+           │
+           ▼
+6. Alice 可通过 sendMessage 与 Lead 通信
 ```
+
+## 新增工具清单
+
+| 工具 | 所有者 | 功能 |
+|------|--------|------|
+| spawnTeammate | Lead | 创建团队成员 |
+| sendMessage | Both | 发送消息给队友 |
+| readInbox | Both | 读取收件箱 |
+| broadcast | Lead | 广播消息给所有队友 |
+| listTeammates | Lead | 列出团队成员 |
 
 ## 相对 s08 的变更
 
 | 组件 | s08 | s09 |
 |------|-----|-----|
-| 架构 | 内联 agentLoop | Agent 框架 |
-| 工具注册 | `Map<String, Function>` | `ToolHandlers` |
-| 团队管理 | 无 | `Team` |
-| 消息通信 | 无 | `MessageBus` |
-| 配置文件 | 无 | `AgentConfig` |
-| 并发 | 后台任务单线程 | 团队多线程 |
-| 持久化 | tasks/*.json | config.json + inbox/*.jsonl |
-| 新增工具 | backgroundRun / checkBackground | spawnTeammate / sendMessage / broadcast / readInbox |
+| Agent 模式 | 单 Agent | Lead + 多 Teammate |
+| 通信方式 | - | MessageBus 收件箱 |
+| 依赖注入 | 无 | Guice |
+| 代码组织 | 单文件 | 组件化 |
+| 执行方式 | 同步 | 同步 + 异步线程池 |
 
 ## 试试看
 
-1. `生成 alice（程序员）和 bob（测试人员）。让 alice 给 bob 发送一条消息`
-2. `向所有队友广播 "状态更新：第一阶段已完成"`
-3. `查看负责人收件箱中的所有消息`
+1. `生成 alice（程序员）和 bob（测试人员）`
+2. `让 alice 给 bob 发送一条消息 "你好 Bob"`
+3. `向所有队友广播 "状态更新：第一阶段已完成"`
+4. `查看收件箱中的所有消息`
 
 ## 核心要义
 
-> **"When the task is too big for one, delegate to teammates"**  
-> 团队协作，异步通信
+> **"One Lead + Multiple Teammates, communicating via async inbox"**  
+> 领导协调，队员协作，收件箱异步通信
 
 **设计原则：**
-- 领导-成员模式：Lead 协调，Teammate 执行
-- 消息总线：JSONL 文件实现异步队列
-- 线程隔离：每个队友独立运行
-- 持久化：团队配置和消息持久化
+- 组件化：职责分离，易于扩展
+- ThreadLocal：跨线程传递状态
+- 线程池：队员异步并行工作
+- 文件存储：团队配置持久化
 
-下篇预告：[S10TeamProtocols - 团队协议：队友需要共同的通信规则](./S10TeamProtocols.md)
+下篇预告：[S10TeamProtocols - 团队协议：优雅停止与方案审批](./S10TeamProtocols.md)

@@ -1,75 +1,79 @@
 package org.jc.agents;
 
-import com.openai.models.chat.completions.*;
+import com.google.inject.AbstractModule;
+import com.google.inject.Guice;
+import com.google.inject.Injector;
+import com.google.inject.Singleton;
+import com.google.inject.multibindings.Multibinder;
+import com.openai.client.OpenAIClient;
+import com.openai.models.chat.completions.ChatCompletionMessageParam;
+import com.openai.models.chat.completions.ChatCompletionUserMessageParam;
 import org.jc.Commons;
-import org.jc.Tools;
-import org.jc.agent.Agent;
-import org.jc.agent.AgentConfig;
-import org.jc.agent.TeammateAgent;
-import org.jc.agent.ToolHandlers;
-import org.jc.message.MessageBus;
-import org.jc.team.Team;
+import org.jc.component.inbox.MessageBus;
+import org.jc.component.loop.*;
+import org.jc.component.plan.PlanRequests;
+import org.jc.component.shutdown.ShutdownRequests;
+import org.jc.component.state.LeadState;
+import org.jc.component.team.Team;
+import org.jc.component.tool.*;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Scanner;
 
-public class S10TeamProtocols {
-    public static final String QWEN_3_5_PLUS = "qwen3.5-plus";
-    public static final String LEAD = "lead";
-    private static Team team = new Team(Commons.TEAM_DIR);
-    private static MessageBus bus = new MessageBus(Commons.INBOX_DIR);
+public class S10TeamProtocols extends AbstractModule {
+    @Override
+    protected void configure() {
+        //领导工具
+        Multibinder<LeadTool> leadToolBinder = Multibinder.newSetBinder(binder(), LeadTool.class);
+        leadToolBinder.addBinding().to(BashTool.class);
+        leadToolBinder.addBinding().to(ReadFileTool.class);
+        leadToolBinder.addBinding().to(WriteFileTool.class);
+        leadToolBinder.addBinding().to(EditFileTool.class);
+        leadToolBinder.addBinding().to(SendMessageTool.class);
+        leadToolBinder.addBinding().to(ReadInboxTool.class);
 
-    private static List<ChatCompletionTool> teammateTools = List.of(
-            Tools.bashTool()
-            , Tools.readFileTool()
-            , Tools.writeFileTool()
-            , Tools.editFileTool()
-            , Tools.sendMessageTool()
-            , Tools.readInboxTool()
-            , Tools.teammateShutdownResponseTool()
-            , Tools.planApprovalTool()
-    );
-    private static ToolHandlers teammateToolHandlers = ToolHandlers.of()
-            .add("bash", (ToolHandlers.TeammateToolCall) (agent, arguments) -> Tools.runBash(arguments))
-            .add("readFile", (ToolHandlers.TeammateToolCall) (agent, arguments) -> Tools.runReadFile(arguments))
-            .add("writeFile", (ToolHandlers.TeammateToolCall) (agent, arguments) -> Tools.runWriteFile(arguments))
-            .add("editFile", (ToolHandlers.TeammateToolCall) (agent, arguments) -> Tools.runEditFile(arguments))
-            .add("sendMessage", (ToolHandlers.TeammateToolCall) (agent, arguments) -> agent.getLead().sendMessage(arguments))
-            .add("readInbox", (ToolHandlers.TeammateToolCall) (agent, arguments) -> agent.getLead().readInbox(arguments))
-            .add("shutdownResponse", (ToolHandlers.TeammateToolCall) TeammateAgent::shutdownResponse)
-            .add("planApproval", (ToolHandlers.TeammateToolCall) TeammateAgent::planApproval);
+        leadToolBinder.addBinding().to(BroadcastTool.class);
+        leadToolBinder.addBinding().to(S10SpawnTeammateTool.class);
+        //请求团队成员停止工作
+        leadToolBinder.addBinding().to(ShutdownRequestTool.class);
+        //检查请求状态
+        leadToolBinder.addBinding().to(ShutdownCheckTool.class);
+        //审核团队成员的工作计划
+        leadToolBinder.addBinding().to(PlanReviewTool.class);
 
-    private static List<ChatCompletionTool> leadTools = List.of(
-            Tools.bashTool()
-            , Tools.readFileTool()
-            , Tools.writeFileTool()
-            , Tools.editFileTool()
-            , Tools.spawnTeammateTool()
-            , Tools.listTeammatesTool()
-            , Tools.sendMessageTool()
-            , Tools.readInboxTool()
-            , Tools.broadcastTool()
-            , Tools.shutdownRequestTool()
-            , Tools.leadShutdownResponseTool()
-            , Tools.planReviewTool()
-    );
-    private static ToolHandlers leadToolHandlers = ToolHandlers.of()
-            .add("bash", (ToolHandlers.LeadToolCall) (agent, arguments) -> Tools.runBash(arguments))
-            .add("readFile", (ToolHandlers.LeadToolCall) (agent, arguments) -> Tools.runReadFile(arguments))
-            .add("writeFile", (ToolHandlers.LeadToolCall) (agent, arguments) -> Tools.runWriteFile(arguments))
-            .add("editFile", (ToolHandlers.LeadToolCall) (agent, arguments) -> Tools.runEditFile(arguments))
-            .add("spawnTeammate", (ToolHandlers.LeadToolCall) (agent, arguments)
-                    -> agent.spawnTeammate(arguments, teammateTools, teammateToolHandlers
-                    , baseAgent -> String
-                            .format("你是: %s, 角色: %s, 工作目录: %s"
-                                    , baseAgent.getName(), baseAgent.getRole()
-                                    , baseAgent.getConfig().getWorkDir())))
-            .add("listTeammates", (ToolHandlers.LeadToolCall) (agent, arguments) -> agent.getTeam().listTeammate())
-            .add("sendMessage", (ToolHandlers.LeadToolCall) Agent::sendMessage)
-            .add("readInbox", (ToolHandlers.LeadToolCall) Agent::readInbox)
-            .add("broadcast", (ToolHandlers.LeadToolCall) Agent::broadcast)
-            .add("shutdownRequest", (ToolHandlers.LeadToolCall) Agent::shutdownRequest)
-            .add("shutdownResponse", (ToolHandlers.LeadToolCall) Agent::shutdownResponse)
-            .add("planReview", (ToolHandlers.LeadToolCall) Agent::planReview);
+
+        //队员工具
+        Multibinder<TeammateTool> teammateToolBinder = Multibinder.newSetBinder(binder(), TeammateTool.class);
+        teammateToolBinder.addBinding().to(BashTool.class);
+        teammateToolBinder.addBinding().to(ReadFileTool.class);
+        teammateToolBinder.addBinding().to(WriteFileTool.class);
+        teammateToolBinder.addBinding().to(EditFileTool.class);
+        teammateToolBinder.addBinding().to(SendMessageTool.class);
+        teammateToolBinder.addBinding().to(ReadInboxTool.class);
+
+        //响应停止请求
+        teammateToolBinder.addBinding().to(ShutdownResponseTool.class);
+        //提交计划
+        teammateToolBinder.addBinding().to(PlanApprovalTool.class);
+
+        //大模型客户端
+        bind(OpenAIClient.class).toInstance(Commons.getClient());
+        //收件箱
+        bind(MessageBus.class).in(Singleton.class);
+        //管理停止请求
+        bind(ShutdownRequests.class).in(Singleton.class);
+        //管理计划请求
+        bind(PlanRequests.class).in(Singleton.class);
+        //团队
+        bind(Team.class).in(Singleton.class);
+        //循环
+        bind(ReActs.class).to(ReActsImpl.class);
+
+
+        bind(LeadReAct.class).in(Singleton.class);
+        bind(TeammateReAct.class).to(S10TeammateReAct.class);
+    }
 
     /**
      * 测试输入：
@@ -82,10 +86,23 @@ public class S10TeamProtocols {
      * @param args
      */
     public static void main(String[] args) {
+        Injector injector = Guice.createInjector(new S10TeamProtocols());
+
+        final ReActs reActs = injector.getInstance(ReActs.class);
+
+        LeadState state = LeadState.builder()
+                .name("lead")
+                .model("qwen3.5-plus")
+                .role("lead")
+                .prompt("你是 " + Commons.CWD + " 工作目录下的团队负责人，请按照停止流程与方案审批规范管理团队成员")
+                .workDir(Commons.CWD)
+                .messages(new ArrayList<>())
+                .build();
+
         // 1. 创建 Scanner 对象
         Scanner scanner = new Scanner(System.in);
         try {
-            List<ChatCompletionMessageParam> messages = new ArrayList<>();
+            List<ChatCompletionMessageParam> messages = state.getMessages();
             while (true) {
                 // 2. 提示用户输入
                 System.out.print("请输入>");
@@ -103,32 +120,8 @@ public class S10TeamProtocols {
                                 .build()
                 ));
 
-                AgentConfig teammateConfig = AgentConfig.of();
-                teammateConfig.setReadInbox(true);
-                teammateConfig.setWorkDir(Commons.CWD);
-                teammateConfig.setShutdownResponse(null);
-                teammateConfig.setEnableIdlePoll(false);
-                teammateConfig.setIdleTimeout(0);
-                teammateConfig.setPollInterval(0);
-                teammateConfig.setTeammateConfig(null);
-
-                AgentConfig config = AgentConfig.of();
-                config.setReadInbox(true);
-                config.setWorkDir(Commons.CWD);
-                config.setTeammateConfig(teammateConfig);
-
-                Agent agent = Agent.of();
-                agent.setName(LEAD);
-                agent.setPromptProvider(baseAgent -> "你是 " + Commons.CWD
-                        + " 工作目录下的团队负责人。创建团队成员，并通过收件箱进行通信协作");
-                agent.setModel(QWEN_3_5_PLUS);
-                agent.setBus(bus);
-                agent.setTeam(team);
-                agent.setTools(leadTools);
-                agent.setToolHandlers(leadToolHandlers);
-                agent.setConfig(config);
-
-                ChatCompletionMessageParam last = agent.loop(messages);
+                state.setMessages(messages);
+                ChatCompletionMessageParam last = reActs.start(state);
                 System.out.println(">>" + Commons.getText(last));
             }
         } finally {
@@ -136,5 +129,4 @@ public class S10TeamProtocols {
             scanner.close();
         }
     }
-
 }

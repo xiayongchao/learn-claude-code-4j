@@ -16,8 +16,6 @@ public class Commons {
 
     public static final String TRANSCRIPT_DIR = Commons.CWD + "/src/main/resources/transcripts";
     public static final String TASK_DIR = Commons.CWD + "/src/main/resources/tasks";
-    public static final String TEAM_DIR = Commons.CWD + "/src/main/resources/team";
-    public static final String INBOX_DIR = Commons.TEAM_DIR + "/inbox";
 
     private static final OpenAIClient openAIClient = OpenAIOkHttpClient.builder()
             .apiKey(System.getenv("DASHSCOPE_API_KEY"))
@@ -26,7 +24,6 @@ public class Commons {
 
     public static OpenAIClient getClient() {
         return openAIClient;
-
     }
 
     public static String getText(ChatCompletionMessageParam param) {

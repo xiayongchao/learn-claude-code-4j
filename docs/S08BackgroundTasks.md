@@ -59,14 +59,14 @@ public String run(String args) {
     TaskInfo task = new TaskInfo("running", null, command);
     tasks.put(taskId, task);
 
-    Commands.execAsync(command, 300_000, false, new CommandCallback() {
+    Commands.execAsync(command, 300_000, false, new Commands.CommandCallback() {
         @Override
-        public void onSuccess(CommandResult result) {
+        public void onSuccess(Commands.CommandResult result) {
             updateTask(taskId, "completed", result.getOutput());
         }
 
         @Override
-        public void onFail(CommandResult result) {
+        public void onFail(Commands.CommandResult result) {
             String status = result.isTimeout() ? "timeout" : "error";
             updateTask(taskId, status, result.getOutput());
         }
@@ -253,7 +253,7 @@ private static final List<ChatCompletionTool> tools = List.of(
 | 任务管理 | 持久化任务文件 | 持久化 + 后台执行 |
 | 执行方式 | 同步阻塞 | 异步非阻塞 |
 | 通知机制 | 无 | drainNotifications 注入 |
-| 新增工具 | taskCreate/Update/List/Get | backgroundRun / checkBackground |
+| 新增工具 | - | backgroundRun / checkBackground |
 
 ## 试试看
 
@@ -270,4 +270,4 @@ private static final List<ChatCompletionTool> tools = List.of(
 - 通知注入：下次 LLM 调用前注入结果
 - 线程安全：ConcurrentHashMap + ReentrantLock
 
-下篇预告：[S09AgentTeams - Agent 团队：任务太大，一个 Agent 忙不过来](./S09AgentTeams.md)
+下篇预告：[S09AgentTeams - Agent 团队：一个 Lead + 多个 Teammate，收件箱通信](./S09AgentTeams.md)
