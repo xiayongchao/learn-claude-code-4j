@@ -15,7 +15,8 @@ public class Team {
     // ===================== 保存配置 =====================
     public void writeTeamConfig(TeamConfig teamConfig) {
         try {
-            Path teamConfigPath = FileUtils.resolve(States.get().getWorkDir(), "team/config.json", true);
+            Path teamConfigPath = FileUtils.resolve(States.get().getWorkDir()
+                    , "team/config.json", true, true);
             FileUtils.write(teamConfigPath, teamConfig);
         } catch (Exception e) {
             e.printStackTrace();
@@ -24,7 +25,8 @@ public class Team {
 
     public TeamConfig readTeamConfig() {
         try {
-            Path teamConfigPath = FileUtils.resolve(States.get().getWorkDir(), "team/config.json", true);
+            Path teamConfigPath = FileUtils.resolve(States.get().getWorkDir()
+                    , "team/config.json", true, true);
             TeamConfig teamConfig = FileUtils.read(teamConfigPath, TeamConfig.class);
             if (teamConfig != null) {
                 return teamConfig;

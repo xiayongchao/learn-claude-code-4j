@@ -68,9 +68,14 @@ public class S11SpawnTeammateTool extends BaseTool<SpawnTeammateToolArgs> {
                 "若无待办工作，请使用闲置工具，系统将自动为你认领新任务", name, role, teamName, workDir));
         state.setUserPrompt(prompt);
         state.setMaxLoopTimes(50);
+        state.setIdleTimeout(1000 * 60 * 5);
+        state.setPollInterval(1000 * 5);
         state.setWorkDir(workDir);
         state.setLead(States.get().getName());
         state.setMessages(new ArrayList<>());
+        state.setShutdownLock(States.get().getShutdownLock());
+        state.setPlanLock(States.get().getPlanLock());
+        state.setClaimTaskLock(States.get().getClaimTaskLock());
 
         //设置队友
         this.teammate(name, role);

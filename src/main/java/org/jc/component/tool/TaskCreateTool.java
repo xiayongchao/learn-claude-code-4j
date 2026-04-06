@@ -2,6 +2,7 @@ package org.jc.component.tool;
 
 import com.alibaba.fastjson2.JSON;
 import com.google.inject.Inject;
+import org.jc.component.enums.TaskStatus;
 import org.jc.component.tool.args.TaskCreateToolArgs;
 import org.jc.component.task.Task;
 import org.jc.component.task.Tasks;
@@ -49,7 +50,7 @@ public class TaskCreateTool extends BaseTool<TaskCreateToolArgs> {
         task.setOwner("");
         task.setSubject(subject);
         task.setDescription(description == null ? "" : description);
-        task.setStatus("pending");
+        task.setStatus(TaskStatus.PENDING.getValue());
         task.setBlockedBy(new ArrayList<>());
         task.setBlocks(new ArrayList<>());
         this.tasks.writeTask(task);

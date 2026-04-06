@@ -11,7 +11,7 @@ public class MessageBus {
     private Path getInboxPath(String to) {
         try {
             return FileUtils.resolve(Objects.requireNonNull(States.get().getWorkDir())
-                    , String.format("inbox/%s.jsonl", to), true);
+                    , String.format("inbox/%s.jsonl", to), true, true);
         } catch (IOException e) {
             return null;
         }

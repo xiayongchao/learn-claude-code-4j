@@ -8,6 +8,7 @@ import org.jc.component.task.Task;
 import org.jc.component.task.Tasks;
 
 import java.util.List;
+import java.util.Objects;
 
 public class ClaimTaskTool extends BaseTool<ClaimTaskToolArgs> {
     private final Tasks tasks;
@@ -41,8 +42,22 @@ public class ClaimTaskTool extends BaseTool<ClaimTaskToolArgs> {
     public String doCall(ClaimTaskToolArgs arguments) {
         int taskId = arguments.getTaskId();
         String owner = States.get().getName();
+
+        States.get().getClaimTaskLock().lock();
         try {
+            List<Task> taskList = this.tasks.list();
+            if (taskList != null) {
+                for (Task task : taskList) {
+                    if (Objects.equals(name(), task.getOwner()) && TaskStatus.IN_PROGRESS.is(task.getStatus())) {
+                        return String.format("错误：任务 %s 还没有处理完成，无法认领新任务，请继续处理", task.getTaskId());
+                    }
+                }
+            }
+
             Task task = this.tasks.readTask(taskId);
+            if (task == null) {
+                return String.format("错误：任务 %s 不存在", taskId);
+            }
 
             // 2. 已被领取
             String existingOwner = task.getOwner();
@@ -69,9 +84,11 @@ public class ClaimTaskTool extends BaseTool<ClaimTaskToolArgs> {
             // 写回文件
             this.tasks.writeTask(task);
 
-            return String.format("已为 %s 认领任务 %s", owner, task);
+            return String.format("已为 %s 认领任务 %s", owner, task.getTaskId());
         } catch (Exception e) {
             return String.format("错误：认领任务失败 - %s", e.getMessage());
+        } finally {
+            States.get().getClaimTaskLock().unlock();
         }
     }
 }

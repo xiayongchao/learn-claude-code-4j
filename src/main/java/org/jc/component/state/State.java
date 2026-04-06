@@ -21,4 +21,6 @@ public interface State {
     ReentrantLock getShutdownLock();
 
     ReentrantLock getPlanLock();
+
+    ReentrantLock getClaimTaskLock();
 }

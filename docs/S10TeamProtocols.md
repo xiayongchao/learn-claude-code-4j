@@ -246,6 +246,16 @@ public class S10TeammateReAct implements TeammateReAct {
 
 ```java
 public class Team {
+    public void writeTeamConfig(TeamConfig teamConfig) {
+        Path teamConfigPath = FileUtils.resolve(workDir, "team/config.json", true, true);
+        FileUtils.write(teamConfigPath, teamConfig);
+    }
+    
+    public TeamConfig readTeamConfig() {
+        Path teamConfigPath = FileUtils.resolve(workDir, "team/config.json", true, true);
+        return FileUtils.read(teamConfigPath, TeamConfig.class);
+    }
+    
     public void resetTeammateStatusAfterTurn() {
         Teammate teammate = findTeammate(States.get().getName());
         

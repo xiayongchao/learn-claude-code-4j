@@ -48,11 +48,20 @@ Agent 工作模式
 
 ```java
 public class Tasks {
-    public void writeTask(Task task) { /* 持久化任务 */ }
-    public Task readTask(int taskId) { /* 读取任务 */ }
+    public void writeTask(Task task) {
+        Path taskPath = FileUtils.resolve(workDir,
+                String.format("tasks/task_%s.json", taskId), true, true);
+        FileUtils.write(taskPath, task);
+    }
+    
+    public Task readTask(int taskId) {
+        Path taskPath = FileUtils.resolve(workDir,
+                String.format("tasks/task_%s.json", taskId), true, true);
+        return FileUtils.read(taskPath, Task.class);
+    }
     
     public List<Task> list() {
-        Path tasksDir = FileUtils.resolve(workDir, "tasks", true);
+        Path tasksDir = FileUtils.resolve(workDir, "tasks", false, true);  // false=目录
         return Files.list(tasksDir)
                 .filter(p -> p.matches("task_\\d+\\.json"))
                 .map(p -> JSON.parseObject(readString(p), Task.class))
@@ -66,7 +75,7 @@ public class Tasks {
     
     public List<Task> scanUnclaimedTasks() {
         return list().stream()
-                .filter(t -> "pending".equals(t.getStatus()))
+                .filter(t -> TaskStatus.PENDING.is(t.getStatus()))
                 .filter(t -> t.getOwner() == null || t.getOwner().isBlank())
                 .filter(t -> t.getBlockedBy() == null || t.getBlockedBy().isEmpty())
                 .toList();
@@ -75,11 +84,11 @@ public class Tasks {
     public boolean claimTask(int taskId, String owner) {
         Task task = readTask(taskId);
         if (task.getOwner() != null) return false;
-        if (!"pending".equals(task.getStatus())) return false;
+        if (!TaskStatus.PENDING.is(task.getStatus())) return false;
         if (task.getBlockedBy() != null && !task.getBlockedBy().isEmpty()) return false;
         
         task.setOwner(owner);
-        task.setStatus("in_progress");
+        task.setStatus(TaskStatus.IN_PROGRESS.getValue());
         writeTask(task);
         return true;
     }
@@ -121,7 +130,7 @@ public class TaskCreateTool extends BaseTool<TaskCreateToolArgs> {
         task.setTaskId(this.tasks.nextTaskId());
         task.setSubject(arguments.getSubject());
         task.setDescription(arguments.getDescription());
-        task.setStatus("pending");
+        task.setStatus(TaskStatus.PENDING.getValue());  // 使用枚举
         task.setBlockedBy(new ArrayList<>());
         task.setBlocks(new ArrayList<>());
         task.setOwner("");
@@ -147,7 +156,7 @@ public class TaskUpdateTool extends BaseTool<TaskUpdateToolArgs> {
         // 更新状态
         if (status != null) {
             task.setStatus(status);
-            if ("completed".equals(status)) {
+            if (TaskStatus.COMPLETED.is(status)) {
                 this.tasks.clearDependency(taskId);  // 完成时清理依赖
             }
         }
@@ -203,7 +212,7 @@ public class TaskListTool extends BaseTool<Void> {
 }
 ```
 
-#### ClaimTaskTool - 认领任务
+#### ClaimTaskTool - 认领任务（带锁）
 
 ```java
 public class ClaimTaskTool extends BaseTool<ClaimTaskToolArgs> {
@@ -211,28 +220,48 @@ public class ClaimTaskTool extends BaseTool<ClaimTaskToolArgs> {
         int taskId = arguments.getTaskId();
         String owner = States.get().getName();
         
-        Task task = this.tasks.readTask(taskId);
-        
-        // 检查已被认领
-        if (task.getOwner() != null && !task.getOwner().isBlank()) {
-            return String.format("错误：任务 %s 已被 %s 认领", taskId, task.getOwner());
+        // 使用 claimTaskLock 防止并发认领
+        States.get().getClaimTaskLock().lock();
+        try {
+            // 检查是否有未完成的任务
+            List<Task> taskList = this.tasks.list();
+            for (Task task : taskList) {
+                if (Objects.equals(name(), task.getOwner()) 
+                        && TaskStatus.IN_PROGRESS.is(task.getStatus())) {
+                    return String.format("错误：任务 %s 还没有处理完成，无法认领新任务", task.getTaskId());
+                }
+            }
+            
+            Task task = this.tasks.readTask(taskId);
+            if (task == null) {
+                return String.format("错误：任务 %s 不存在", taskId);
+            }
+            
+            // 检查已被认领
+            if (task.getOwner() != null && !task.getOwner().isBlank()) {
+                return String.format("错误：任务 %s 已被 %s 认领", taskId, task.getOwner());
+            }
+            
+            // 检查状态
+            if (!TaskStatus.PENDING.is(task.getStatus())) {
+                return String.format("错误：任务 %s 无法认领，状态为 %s", taskId, task.getStatus());
+            }
+            
+            // 检查依赖
+            if (task.getBlockedBy() != null && !task.getBlockedBy().isEmpty()) {
+                return String.format("错误：任务 %s 被其他任务阻塞", taskId);
+            }
+            
+            task.setOwner(owner);
+            task.setStatus(TaskStatus.IN_PROGRESS.getValue());
+            this.tasks.writeTask(task);
+            
+            return String.format("已为 %s 认领任务 %s", owner, task.getTaskId());
+        } catch (Exception e) {
+            return String.format("错误：认领任务失败 - %s", e.getMessage());
+        } finally {
+            States.get().getClaimTaskLock().unlock();
         }
-        
-        // 检查状态
-        if (!"pending".equals(task.getStatus())) {
-            return String.format("错误：任务 %s 无法认领，状态为 %s", taskId, task.getStatus());
-        }
-        
-        // 检查依赖
-        if (task.getBlockedBy() != null && !task.getBlockedBy().isEmpty()) {
-            return String.format("错误：任务 %s 被其他任务阻塞", taskId);
-        }
-        
-        task.setOwner(owner);
-        task.setStatus("in_progress");
-        this.tasks.writeTask(task);
-        
-        return String.format("已为 %s 认领任务 %s", owner, task);
     }
 }
 ```
@@ -283,12 +312,20 @@ public class S11TeammateReAct implements TeammateReAct {
     }
     
     private boolean idlePoll(List<ChatCompletionMessageParam> messages) {
+        boolean resume = false;
+        
         long idleTimeout = States.teammate().getIdleTimeout();    // 默认 5 分钟
-        long pollInterval = States.teammate().getPollInterval();  // 默认 10 秒
-        long polls = idleTimeout / pollInterval;
+        long pollInterval = States.teammate().getPollInterval();  // 默认 5 秒
+        long polls = idleTimeout / Math.max(pollInterval, 1);
         
         for (int i = 0; i < polls; i++) {
-            Thread.sleep(pollInterval);
+            System.out.printf(">>>%s准备认领任务%n", States.get().getName());
+            try {
+                Thread.sleep(pollInterval);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
             
             // 检查收件箱
             int readSize = this.readInbox(messages);
@@ -347,12 +384,15 @@ public class S11TeammateReAct implements TeammateReAct {
 ### 6. TeammateState 扩展
 
 ```java
-public class TeammateState implements State {
+public class TeammateState extends BaseState implements State {
+    private String userPrompt;
+    private Integer maxLoopTimes;
+    private String lead;
     private boolean shutdown;
     private boolean idle;
-    private long idleTimeout = 300_000;    // 5 分钟
-    private long pollInterval = 10_000;    // 10 秒
-    // ...
+    private long idleTimeout = 1000 * 60 * 5;   // 5 分钟
+    private long pollInterval = 1000 * 5;       // 5 秒
+    // 锁从 BaseState 继承
 }
 ```
 
@@ -368,8 +408,18 @@ public class S11SpawnTeammateTool extends BaseTool<SpawnTeammateToolArgs> {
         state.setPrompt(String.format("你是: %s, 角色: %s, 所属团队: %s, 工作目录: %s。" +
                 "若无待办工作，请使用闲置工具，系统将自动为你认领新任务",
                 name, role, teamName, workDir));
-        state.setIdleTimeout(300_000);  // 5 分钟空闲超时
-        state.setPollInterval(10_000);  // 10 秒轮询间隔
+        state.setUserPrompt(prompt);
+        state.setMaxLoopTimes(50);
+        state.setIdleTimeout(1000 * 60 * 5);   // 5 分钟
+        state.setPollInterval(1000 * 5);       // 5 秒
+        state.setWorkDir(workDir);
+        state.setLead(States.get().getName());
+        state.setMessages(new ArrayList<>());
+        
+        // 共享 Lead 的锁，保证线程安全
+        state.setShutdownLock(States.get().getShutdownLock());
+        state.setPlanLock(States.get().getPlanLock());
+        state.setClaimTaskLock(States.get().getClaimTaskLock());
         
         this.teammate(name, role);
         this.reActs.start(state);
@@ -403,7 +453,7 @@ Agent 自主工作:
 4. 发现未认领任务 #1
            │
            ▼
-5. 调用 claimTask(1) 认领
+5. claimTaskLock.lock() → 认领任务 → lock.unlock()
            │
            ▼
 6. 自动开始执行任务
@@ -417,7 +467,7 @@ Agent 自主工作:
 | taskUpdate | Lead | 更新任务状态/依赖 |
 | taskList | Both | 列出所有任务 |
 | taskGet | Both | 获取任务详情 |
-| claimTask | Both | 认领任务 |
+| claimTask | Both | 认领任务（带锁） |
 | idle | Teammate | 进入空闲轮询 |
 
 ## Guice 配置
@@ -480,6 +530,8 @@ public class S11AutonomousAgents extends AbstractModule {
 | 轮询机制 | 无 | 空闲轮询 + 超时关闭 |
 | 身份注入 | 无 | 压缩后重新注入 |
 | Agent 状态 | 基本 | 完整状态机 |
+| 并发控制 | 无 | claimTaskLock |
+| 轮询参数 | - | idleTimeout=5min, pollInterval=5s |
 
 ## 试试看
 
@@ -499,6 +551,8 @@ public class S11AutonomousAgents extends AbstractModule {
 - 超时关闭：无工作可做时自动退出
 
 **设计亮点：**
+- `claimTaskLock`：使用 ReentrantLock 防止并发认领同一任务
 - `identityReInjection`：上下文压缩后重新注入身份信息
 - `clearDependency`：任务完成时自动解除依赖
 - `双向依赖维护`：更新 blockedBy 时同步更新 blocks
+- `共享锁机制`：Teammate 继承 Lead 的锁，保证线程安全

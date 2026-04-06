@@ -91,7 +91,7 @@ public class S09AgentTeams extends AbstractModule {
 
 ## 核心组件详解
 
-### 1. State 状态管理
+### 1. State 接口与 BaseState 基类
 
 ```java
 public interface State {
@@ -101,6 +101,22 @@ public interface State {
     String getPrompt();
     String getWorkDir();
     List<ChatCompletionMessageParam> getMessages();
+    ReentrantLock getShutdownLock();
+    ReentrantLock getPlanLock();
+    ReentrantLock getClaimTaskLock();  // 新增：任务认领锁
+}
+
+public class BaseState implements State {
+    protected String name;
+    protected String role;
+    protected String model;
+    protected String prompt;
+    protected String workDir;
+    protected List<ChatCompletionMessageParam> messages;
+    protected ReentrantLock shutdownLock;
+    protected ReentrantLock planLock;
+    protected ReentrantLock claimTaskLock;
+    // ... getter/setter
 }
 ```
 
@@ -108,10 +124,11 @@ LeadState vs TeammateState：
 
 | 属性 | LeadState | TeammateState |
 |------|-----------|---------------|
+| 继承 | BaseState | BaseState |
 | messages | ✓ | ✓ |
-| shutdown | - | ✓ |
-| idle | - | ✓ |
+| shutdown/idle | - | ✓ |
 | maxLoopTimes | - | ✓ |
+| 锁 | 3个共享 | 继承自 Lead |
 
 ### 2. States ThreadLocal 状态传递
 
@@ -132,7 +149,7 @@ public class States {
 ```java
 public interface ReActs {
     ChatCompletionMessageParam start(LeadState state);  // 领导同步执行
-    void start(TeammateState state);                     // 队员异步执行
+    void start(TeammateState state);                  // 队员异步执行
 }
 ```
 
@@ -140,7 +157,8 @@ public interface ReActs {
 
 ```java
 public class ReActsImpl implements ReActs {
-    private final ThreadPoolExecutor theadPools = new ThreadPoolExecutor(0, 5,
+    // 线程池配置：核心5，最大10
+    private final ThreadPoolExecutor theadPools = new ThreadPoolExecutor(5, 10,
             300, TimeUnit.SECONDS, new ArrayBlockingQueue<>(50),
             AiThreadFactory.create("loop", true));
     
@@ -170,13 +188,41 @@ public class ReActsImpl implements ReActs {
 }
 ```
 
-### 5. MessageBus 消息总线
+### 5. FileUtils 工具类
+
+```java
+public class FileUtils {
+    // 新增：创建目录路径
+    public static Path getOrCreateDirPath(Path path) throws IOException {
+        if (!FileUtils.exists(path)) {
+            Files.createDirectories(path);
+        }
+        return path;
+    }
+    
+    // 签名变更：resolve(path, subPath, isFile, init)
+    // isFile: true=文件, false=目录
+    // init: true=不存在则创建
+    public static Path resolve(Path path, String subPath, boolean isFile, boolean init) throws IOException {
+        Path resolvePath = path.resolve(subPath);
+        if (init) {
+            if (isFile) {
+                return FileUtils.getOrCreateFilePath(resolvePath);
+            }
+            return FileUtils.getOrCreateDirPath(resolvePath);
+        }
+        return resolvePath;
+    }
+}
+```
+
+### 6. MessageBus 消息总线
 
 ```java
 public class MessageBus {
     private Path getInboxPath(String to) {
-        return FileUtils.resolve(States.get().getWorkDir(),
-                String.format("inbox/%s.jsonl", to), true);
+        return FileUtils.resolve(workDir,
+                String.format("inbox/%s.jsonl", to), true, true);  // true=文件, true=初始化
     }
     
     public void send(String to, InBoxMessage message) throws IOException {
@@ -194,10 +240,20 @@ public class MessageBus {
 }
 ```
 
-### 6. Team 团队管理
+### 7. Team 团队管理
 
 ```java
 public class Team {
+    public void writeTeamConfig(TeamConfig teamConfig) {
+        Path teamConfigPath = FileUtils.resolve(workDir, "team/config.json", true, true);
+        FileUtils.write(teamConfigPath, teamConfig);
+    }
+    
+    public TeamConfig readTeamConfig() {
+        Path teamConfigPath = FileUtils.resolve(workDir, "team/config.json", true, true);
+        return FileUtils.read(teamConfigPath, TeamConfig.class);
+    }
+    
     public void setTeammateIdle() { /* 更新状态为 idle */ }
     public void setTeammateShutdown() { /* 更新状态为 shutdown */ }
     public void setTeammateWorking() { /* 更新状态为 working */ }
@@ -218,7 +274,7 @@ public class Team {
 }
 ```
 
-### 7. Tool 工具体系
+### 8. Tool 工具体系
 
 ```java
 public interface Tool extends LeadTool, TeammateTool {
@@ -241,7 +297,7 @@ public abstract class BaseTool<T> implements Tool {
 }
 ```
 
-### 8. LeadReAct 领导循环
+### 9. LeadReAct 领导循环
 
 ```java
 public class LeadReAct {
@@ -258,7 +314,7 @@ public class LeadReAct {
 }
 ```
 
-### 9. S09SpawnTeammateTool 创建队员
+### 10. S09SpawnTeammateTool 创建队员
 
 ```java
 public class S09SpawnTeammateTool extends BaseTool<SpawnTeammateToolArgs> {
@@ -271,7 +327,7 @@ public class S09SpawnTeammateTool extends BaseTool<SpawnTeammateToolArgs> {
         state.setMaxLoopTimes(50);
         
         this.teammate(name, role);     // 注册到团队
-        this.reActs.start(state);       // 异步启动
+        this.reActs.start(state);      // 异步启动
         return String.format("创建 '%s' (角色: %s)", name, role);
     }
 }
@@ -317,6 +373,8 @@ public class S09SpawnTeammateTool extends BaseTool<SpawnTeammateToolArgs> {
 | 依赖注入 | 无 | Guice |
 | 代码组织 | 单文件 | 组件化 |
 | 执行方式 | 同步 | 同步 + 异步线程池 |
+| 状态管理 | - | BaseState + 三把锁 |
+| 线程池 | - | 核心5，最大10 |
 
 ## 试试看
 
@@ -333,7 +391,8 @@ public class S09SpawnTeammateTool extends BaseTool<SpawnTeammateToolArgs> {
 **设计原则：**
 - 组件化：职责分离，易于扩展
 - ThreadLocal：跨线程传递状态
-- 线程池：队员异步并行工作
+- 线程池：队员异步并行工作（核心5，最大10）
 - 文件存储：团队配置持久化
+- 锁机制：BaseState 提供 shutdownLock/planLock/claimTaskLock
 
 下篇预告：[S10TeamProtocols - 团队协议：优雅停止与方案审批](./S10TeamProtocols.md)

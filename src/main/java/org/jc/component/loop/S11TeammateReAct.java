@@ -230,6 +230,7 @@ public class S11TeammateReAct implements TeammateReAct {
      * @return
      */
     private boolean idlePoll(List<ChatCompletionMessageParam> messages) {
+
         boolean resume = false;
 
         long idleTimeout = States.teammate().getIdleTimeout();
@@ -237,6 +238,7 @@ public class S11TeammateReAct implements TeammateReAct {
         long polls = idleTimeout / Math.max(pollInterval, 1);
 
         for (int i = 0; i < polls; i++) {
+            System.out.printf(">>>%s准备认领任务%n", States.get().getName());
             try {
                 Thread.sleep(pollInterval);
             } catch (InterruptedException e) {

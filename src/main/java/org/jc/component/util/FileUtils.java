@@ -11,6 +11,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class FileUtils {
+    public static Path getOrCreateDirPath(Path path) throws IOException {
+        if (!FileUtils.exists(path)) {
+            Files.createDirectories(path);
+        }
+        return path;
+    }
+
     public static Path getOrCreateFilePath(Path path) throws IOException {
         if (!FileUtils.exists(path)) {
             // 1. 递归创建所有父目录（已存在不报错，幂等）
@@ -35,16 +42,19 @@ public class FileUtils {
         return fileName.toLowerCase().endsWith(".jsonl");
     }
 
-    public static Path resolve(Path path, String subPath, boolean init) throws IOException {
+    public static Path resolve(Path path, String subPath, boolean isFile, boolean init) throws IOException {
         Path resolvePath = path.resolve(subPath);
         if (init) {
-            return FileUtils.getOrCreateFilePath(resolvePath);
+            if (isFile) {
+                return FileUtils.getOrCreateFilePath(resolvePath);
+            }
+            return FileUtils.getOrCreateDirPath(resolvePath);
         }
         return resolvePath;
     }
 
-    public static Path resolve(String path, String subPath, boolean init) throws IOException {
-        return FileUtils.resolve(Paths.get(path), subPath, init);
+    public static Path resolve(String path, String subPath, boolean isFile, boolean init) throws IOException {
+        return FileUtils.resolve(Paths.get(path), subPath, isFile, init);
     }
 
     public static <T> List<T> readList(String filePath, Class<T> tClass) throws IOException {

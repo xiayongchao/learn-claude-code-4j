@@ -12,7 +12,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class ReActsImpl implements ReActs {
-    private final ThreadPoolExecutor theadPools = new ThreadPoolExecutor(0, 5
+    private final ThreadPoolExecutor theadPools = new ThreadPoolExecutor(5, 10
             , 300, TimeUnit.SECONDS
             , new ArrayBlockingQueue<>(50)
             , AiThreadFactory.create("loop", true));

@@ -17,7 +17,7 @@ public class Tasks {
         try {
             int taskId = task.getTaskId();
             Path taskPath = FileUtils.resolve(States.get().getWorkDir()
-                    , String.format("tasks/task_%s.json", taskId), true);
+                    , String.format("tasks/task_%s.json", taskId), true, true);
             FileUtils.write(taskPath, task);
         } catch (Exception e) {
             throw new RuntimeException("保存任务失败", e);
@@ -27,7 +27,7 @@ public class Tasks {
     public Task readTask(int taskId) {
         try {
             Path taskPath = FileUtils.resolve(States.get().getWorkDir()
-                    , String.format("tasks/task_%s.json", taskId), true);
+                    , String.format("tasks/task_%s.json", taskId), true, true);
             return FileUtils.read(taskPath, Task.class);
         } catch (Exception e) {
             throw new RuntimeException("读取任务失败", e);
@@ -43,7 +43,7 @@ public class Tasks {
         List<Task> tasks = new ArrayList<>();
         try {
             Path tasksDir = FileUtils.resolve(States.get().getWorkDir()
-                    , "tasks", true);
+                    , "tasks", false, true);
             Files.list(tasksDir)
                     .sorted()
                     .filter(p -> p.getFileName().toString().matches("task_\\d+\\.json"))
@@ -98,7 +98,7 @@ public class Tasks {
     public int maxTaskId() {
         try {
             Path tasksDir = FileUtils.resolve(States.get().getWorkDir()
-                    , "tasks", true);
+                    , "tasks", false, true);
             List<Integer> ids = Files.list(tasksDir)
                     .filter(Files::isRegularFile)
                     .map(Path::getFileName)
