@@ -201,4 +201,44 @@ public class Tasks {
             return false;
         }
     }
+
+    public void bindWorktree(int taskId, String worktree, String owner) {
+        Task task = this.readTask(taskId);
+        if (task == null) {
+            return;
+        }
+        task.setWorktree(worktree);
+        if (owner != null && !owner.isBlank()) {
+            task.setOwner(owner);
+        }
+        if (TaskStatus.PENDING.is(task.getStatus())) {
+            task.setStatus(TaskStatus.IN_PROGRESS.getValue());
+        }
+        task.setUpdatedAt(System.currentTimeMillis());
+        this.writeTask(task);
+    }
+
+    public void bindWorktree(int taskId, String worktree) {
+        bindWorktree(taskId, worktree, "");
+    }
+
+    public void unbindWorktree(int taskId) {
+        Task task = this.readTask(taskId);
+        if (task == null) {
+            return;
+        }
+        task.setWorktree("");
+        task.setUpdatedAt(System.currentTimeMillis());
+        this.writeTask(task);
+    }
+
+    public void updateStatus(int taskId, String status) {
+        Task task = this.readTask(taskId);
+        if (task == null) {
+            return;
+        }
+        task.setStatus(status);
+        task.setUpdatedAt(System.currentTimeMillis());
+        this.writeTask(task);
+    }
 }

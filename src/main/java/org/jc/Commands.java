@@ -56,9 +56,16 @@ public class Commands {
      * @param needSudo  是否sudo提权(Linux生效)
      */
     public static CommandResult execSync(String command, long timeoutMs, boolean needSudo) {
+        return execSync(command, timeoutMs, needSudo, null);
+    }
+
+    public static CommandResult execSync(String command, long timeoutMs, boolean needSudo, java.nio.file.Path cwd) {
         List<String> cmdList = buildCommand(command, needSudo);
         ProcessBuilder pb = new ProcessBuilder(cmdList);
         pb.redirectErrorStream(true);
+        if (cwd != null) {
+            pb.directory(cwd.toFile());
+        }
 
         Process process = null;
         StringBuilder outSb = new StringBuilder();

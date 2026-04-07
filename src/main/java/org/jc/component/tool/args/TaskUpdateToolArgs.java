@@ -5,6 +5,7 @@ import java.util.List;
 public class TaskUpdateToolArgs {
     private int taskId;
     private String status;
+    private String owner;
     private List<Integer> addBlockedBy;
     private List<Integer> addBlocks;
 
@@ -22,6 +23,14 @@ public class TaskUpdateToolArgs {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getOwner() {
+        return owner;
+    }
+
+    public void setOwner(String owner) {
+        this.owner = owner;
     }
 
     public List<Integer> getAddBlockedBy() {

@@ -5,6 +5,7 @@ import com.google.inject.Inject;
 import org.jc.component.tool.args.TaskUpdateToolArgs;
 import org.jc.component.enums.TaskStatus;
 import org.jc.component.task.Task;
+import org.jc.component.task.Task;
 import org.jc.component.task.Tasks;
 
 import java.util.*;
@@ -30,6 +31,9 @@ public class TaskUpdateTool extends BaseTool<TaskUpdateToolArgs> {
                                 "status": {
                                     "type": "string",
                                     "enum": [\"%s\"]
+                                },
+                                "owner": {
+                                    "type": "string"
                                 },
                                 "addBlockedBy": {
                                     "type": "array",
@@ -59,6 +63,7 @@ public class TaskUpdateTool extends BaseTool<TaskUpdateToolArgs> {
     public String doCall(TaskUpdateToolArgs arguments) {
         int taskId = arguments.getTaskId();
         String status = arguments.getStatus();
+        String owner = arguments.getOwner();
         List<Integer> addBlockedBy = arguments.getAddBlockedBy();
         List<Integer> addBlocks = arguments.getAddBlocks();
 
@@ -79,6 +84,11 @@ public class TaskUpdateTool extends BaseTool<TaskUpdateToolArgs> {
             if (TaskStatus.COMPLETED.is(status)) {
                 this.tasks.clearDependency(taskId);
             }
+        }
+
+        // 更新owner
+        if (owner != null) {
+            task.setOwner(owner);
         }
 
         // 添加依赖

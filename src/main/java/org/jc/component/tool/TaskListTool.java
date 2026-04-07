@@ -33,7 +33,7 @@ public class TaskListTool extends BaseTool<Void> {
         List<Task> tasks = this.tasks.list();
 
         if (tasks == null || tasks.isEmpty()) {
-            return "暂无任务";
+            return "No tasks.";
         }
 
         List<String> lines = new ArrayList<>();
@@ -46,11 +46,13 @@ public class TaskListTool extends BaseTool<Void> {
                 default -> "[?]";
             };
 
-            List<Integer> blockedBy = t.getBlockedBy();
-            String blocked = (blockedBy != null && !blockedBy.isEmpty())
-                    ? " (依赖: " + JSON.toJSONString(blockedBy) + ")"
+            String owner = t.getOwner() != null && !t.getOwner().isBlank()
+                    ? " owner=" + t.getOwner()
                     : "";
-            lines.add(marker + " " + t.getTaskId() + ": " + t.getSubject() + blocked);
+            String worktree = t.getWorktree() != null && !t.getWorktree().isBlank()
+                    ? " wt=" + t.getWorktree()
+                    : "";
+            lines.add(marker + " #" + t.getTaskId() + ": " + t.getSubject() + owner + worktree);
         }
 
         return String.join("\n", lines);
