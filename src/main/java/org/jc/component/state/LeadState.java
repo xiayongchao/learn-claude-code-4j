@@ -5,7 +5,7 @@ import com.openai.models.chat.completions.ChatCompletionMessageParam;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class LeadState extends BaseState implements State {
+public class LeadState extends BaseState {
     public LeadState() {
     }
 

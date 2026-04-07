@@ -1,6 +1,6 @@
 package org.jc.component.state;
 
-public class TeammateState extends BaseState implements State {
+public class TeammateState extends BaseState {
     private String userPrompt;
     private Integer maxLoopTimes;
 

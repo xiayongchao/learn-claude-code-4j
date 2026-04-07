@@ -63,6 +63,9 @@ public class TaskUpdateTool extends BaseTool<TaskUpdateToolArgs> {
         List<Integer> addBlocks = arguments.getAddBlocks();
 
         Task task = this.tasks.readTask(taskId);
+        if (task == null) {
+            return "错误: 未知任务 " + taskId;
+        }
 
         // 更新状态
         if (status != null && !status.isBlank()) {

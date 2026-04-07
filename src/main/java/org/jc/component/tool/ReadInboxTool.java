@@ -5,7 +5,6 @@ import com.google.inject.Inject;
 import org.jc.component.inbox.InBoxMessage;
 import org.jc.component.inbox.MessageBus;
 import org.jc.component.state.States;
-import org.jc.component.team.Team;
 
 import java.io.IOException;
 import java.util.List;
@@ -13,10 +12,9 @@ import java.util.Objects;
 
 public class ReadInboxTool extends BaseTool<Void> {
     private final MessageBus bus;
-    private final Team team;
 
     @Inject
-    public ReadInboxTool(MessageBus bus, Team team) {
+    public ReadInboxTool(MessageBus bus) {  
         super("readInbox", Void.class, """
                 {
                     "type": "function",
@@ -33,7 +31,6 @@ public class ReadInboxTool extends BaseTool<Void> {
                 }
                 """);
         this.bus = Objects.requireNonNull(bus);
-        this.team = Objects.requireNonNull(team);
     }
 
     /**

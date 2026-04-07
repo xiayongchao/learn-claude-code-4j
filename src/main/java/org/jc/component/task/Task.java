@@ -10,6 +10,9 @@ public class Task {
     private List<Integer> blockedBy;
     private List<Integer> blocks;
     private String owner;
+    private String worktree;
+    private long createdAt;
+    private long updatedAt;
 
     public int getTaskId() {
         return taskId;
@@ -65,5 +68,29 @@ public class Task {
 
     public void setOwner(String owner) {
         this.owner = owner;
+    }
+
+    public String getWorktree() {
+        return worktree;
+    }
+
+    public void setWorktree(String worktree) {
+        this.worktree = worktree;
+    }
+
+    public long getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(long createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public long getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(long updatedAt) {
+        this.updatedAt = updatedAt;
     }
 }

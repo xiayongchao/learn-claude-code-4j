@@ -7,6 +7,7 @@ import org.jc.component.util.FileUtils;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -32,6 +33,11 @@ public class Tasks {
         } catch (Exception e) {
             throw new RuntimeException("读取任务失败", e);
         }
+    }
+
+    public boolean exists(int taskId) {
+        Path path = Paths.get(States.get().getWorkDir()).resolve(String.format("tasks/task_%s.json", taskId));
+        return FileUtils.exists(path);
     }
 
     /**
