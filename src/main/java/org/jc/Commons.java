@@ -17,13 +17,22 @@ public class Commons {
     public static final String TRANSCRIPT_DIR = Commons.CWD + "/src/main/resources/transcripts";
     public static final String TASK_DIR = Commons.CWD + "/src/main/resources/tasks";
 
-    private static final OpenAIClient openAIClient = OpenAIOkHttpClient.builder()
+    private static final OpenAIClient qwenAIClient = OpenAIOkHttpClient.builder()
             .apiKey(System.getenv("DASHSCOPE_API_KEY"))
             .baseUrl("https://dashscope.aliyuncs.com/compatible-mode/v1")
             .build();
 
-    public static OpenAIClient getClient() {
-        return openAIClient;
+    private static final OpenAIClient kimiAIClient = OpenAIOkHttpClient.builder()
+            .apiKey(System.getenv("SILICONFLOW_API_KEY"))
+            .baseUrl("https://api.siliconflow.cn/v1")
+            .build();
+
+    public static OpenAIClient getQwenClient() {
+        return qwenAIClient;
+    }
+
+    public static OpenAIClient getKimiClient() {
+        return kimiAIClient;
     }
 
     public static String getText(ChatCompletionMessageParam param) {

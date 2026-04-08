@@ -74,12 +74,12 @@ public class S01AgentLoop {
             fullMessages.addAll(messages);
 
             ChatCompletionCreateParams params = ChatCompletionCreateParams.builder()
-                    .model("qwen3.5-plus")
+                    .model("Pro/moonshotai/Kimi-K2.5")
                     .messages(fullMessages)
                     .tools(tools)
                     .build();
 
-            ChatCompletion chatCompletion = Commons.getClient().chat().completions().create(params);
+            ChatCompletion chatCompletion = Commons.getKimiClient().chat().completions().create(params);
             ChatCompletionMessage message = chatCompletion.choices().get(0).message();
 
             // 将模型的消息加入历史记录

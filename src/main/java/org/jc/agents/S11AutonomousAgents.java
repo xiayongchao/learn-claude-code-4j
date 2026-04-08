@@ -76,7 +76,7 @@ public class S11AutonomousAgents extends AbstractModule {
         /////////////////////////////////////////////////////////////////////////////////
 
         //大模型客户端
-        bind(OpenAIClient.class).toInstance(Commons.getClient());
+        bind(OpenAIClient.class).toInstance(Commons.getQwenClient());
         //收件箱
         bind(MessageBus.class).in(Singleton.class);
         //管理停止请求

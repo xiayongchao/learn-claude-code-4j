@@ -111,7 +111,7 @@ public class S08BackgroundTasks {
                     .tools(tools)
                     .build();
 
-            ChatCompletion chatCompletion = Commons.getClient().chat().completions().create(params);
+            ChatCompletion chatCompletion = Commons.getQwenClient().chat().completions().create(params);
             ChatCompletionMessage message = chatCompletion.choices().get(0).message();
 
             // 将模型的消息加入历史记录

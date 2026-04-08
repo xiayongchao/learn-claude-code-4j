@@ -131,7 +131,7 @@ public class Compacts {
                     .maxCompletionTokens(2000)
                     .build();
 
-            ChatCompletion chatCompletion = Commons.getClient().chat().completions().create(params);
+            ChatCompletion chatCompletion = Commons.getQwenClient().chat().completions().create(params);
             ChatCompletionMessage message = chatCompletion.choices().get(0).message();
             String summary = Commons.getAssistantText(message.toParam());
 

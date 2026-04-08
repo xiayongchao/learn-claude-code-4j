@@ -45,7 +45,7 @@ public class S09AgentTeams extends AbstractModule {
         teammateToolBinder.addBinding().to(ReadInboxTool.class);
 
         //大模型客户端
-        bind(OpenAIClient.class).toInstance(Commons.getClient());
+        bind(OpenAIClient.class).toInstance(Commons.getQwenClient());
         //收件箱
         bind(MessageBus.class).in(Singleton.class);
         //团队
