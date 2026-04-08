@@ -1,4 +1,4 @@
-package org.jc.component.channel;
+package org.jc.component.channel.feishu;
 
 import com.lark.oapi.core.utils.Jsons;
 import com.lark.oapi.event.EventDispatcher;
@@ -7,9 +7,6 @@ import com.lark.oapi.service.im.v1.model.P2MessageReceiveV1;
 import com.lark.oapi.ws.Client;
 
 import java.lang.Thread;
-
-
-import okhttp3.*;
 
 public class TestFeiShu {
     // onP2MessageReceiveV1 为接收消息 v2.0；onCustomizedEvent 内的 message 为接收消息 v1.0。

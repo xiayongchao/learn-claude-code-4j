@@ -66,7 +66,7 @@ public class S12WorktreeTaskIsolation extends AbstractModule {
 
         //大模型客户端
         bind(OpenAIClient.class).toInstance(Commons.getQwenClient());
-        bind(TeammateReAct.class).to(S12TeammateReAct.class);
+        bind(TeammateReAct.class).to(DefaultTeammateReAct.class);
         bind(LeadReAct.class).in(Singleton.class);
         bind(EventBus.class).in(Singleton.class);
         bind(ReActs.class).to(ReActsImpl.class);

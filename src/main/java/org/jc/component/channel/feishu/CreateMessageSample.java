@@ -1,4 +1,4 @@
-package org.jc.component.channel;
+package org.jc.component.channel.feishu;
 
 import com.google.gson.JsonParser;
 import com.lark.oapi.Client;

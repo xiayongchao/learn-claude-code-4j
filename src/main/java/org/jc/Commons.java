@@ -18,12 +18,14 @@ public class Commons {
     public static final String TASK_DIR = Commons.CWD + "/src/main/resources/tasks";
 
     private static final OpenAIClient qwenAIClient = OpenAIOkHttpClient.builder()
-            .apiKey(System.getenv("DASHSCOPE_API_KEY"))
+            .apiKey("sk-b2439acfba024136b426a92c8d1a9691")
+//            .apiKey(System.getenv("DASHSCOPE_API_KEY"))
             .baseUrl("https://dashscope.aliyuncs.com/compatible-mode/v1")
             .build();
 
     private static final OpenAIClient kimiAIClient = OpenAIOkHttpClient.builder()
-            .apiKey(System.getenv("SILICONFLOW_API_KEY"))
+            .apiKey("sk-eqyomyrztqgaysyhdmlrcbtndvtkmbqwawywwoyopupxcsht")
+//            .apiKey(System.getenv("SILICONFLOW_API_KEY"))
             .baseUrl("https://api.siliconflow.cn/v1")
             .build();
 

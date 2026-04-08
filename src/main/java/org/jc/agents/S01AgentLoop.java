@@ -98,9 +98,9 @@ public class S01AgentLoop {
                 if (toolMessage != null) {
                     // 将工具执行结果以 "tool" 角色发回给模型
                     messages.add(toolMessage);
-    }
-}
+                }
+            }
 
+        }
     }
-}
 }
